@@ -75,6 +75,61 @@ console.log("✅ Gemini AI Model initialized successfully.");
 const cooldowns = new Map();
 const COOLDOWN_TIME = 3000; // 3 seconds
 
+// --- Reusable AI Response Function ---
+async function handleAIResponse(message) {
+    try {
+        await message.channel.sendTyping();
+
+        const messages = await message.channel.messages.fetch({ limit: 15 });
+        const context = messages
+            .filter(m => !m.author.bot && m.content.length > 0)
+            .reverse()
+            .map(m => {
+                const timestamp = m.createdAt.toISOString().replace('T', ' ').slice(0, 19);
+                const content = m.content.length > 500 ? m.content.slice(0, 500) + '...' : m.content;
+                return `[${timestamp}] ${m.author.username}: ${content}`;
+            })
+            .join('\n');
+
+        const prompt = `You are "The Founder", an AI assistant in a Discord server.
+
+IMPORTANT RULES:
+- You are NOT a moderator. Do NOT warn users about their behavior.
+- You are NOT responsible for enforcing rules automatically.
+- You CANNOT issue warnings on your own. Only staff can issue warnings via the warn command.
+- Do NOT mention spam, flooding, or rule violations in your responses.
+- Simply have friendly, helpful conversations.
+- Staff members (with role <@&${process.env.STAFF_ROLE_ID}>) can chat freely without any restrictions.
+
+Conversation History:
+${context}
+
+Current User (${message.author.username}): ${message.content}
+
+Respond naturally and helpfully.`;
+
+        const generationConfig = {
+            temperature: 0.9,
+            maxOutputTokens: 1024,
+        };
+
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig,
+        });
+
+        const response = result.response;
+        const text = response.text();
+
+        if (text) {
+            await message.reply(text);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error in handleAIResponse:`, error);
+        message.reply('❌ An error occurred while generating an AI response.').catch(console.error);
+    }
+}
+
 // Message Create Event
 client.on('messageCreate', async (message) => {
     try {
@@ -149,65 +204,19 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // --- Staff are exempt from AI replies and cooldowns ---
-        if (isStaff) return;
-
-        // --- Cooldown for non-staff ---
-        if (cooldowns.has(message.author.id)) {
-            const expirationTime = cooldowns.get(message.author.id) + COOLDOWN_TIME;
-            if (Date.now() < expirationTime) return; // Silently ignore
-        }
-        cooldowns.set(message.author.id, Date.now());
-
-        // --- AI Auto-Reply (only in the designated channel) ---
+        // --- AI Auto-Reply ---
         if (message.channel.id === process.env.AI_CHANNEL_ID) {
-            await message.channel.sendTyping();
-
-            const messages = await message.channel.messages.fetch({ limit: 15 });
-            const context = messages
-                .filter(m => !m.author.bot && m.content.length > 0)
-                .reverse()
-                .map(m => {
-                    const timestamp = m.createdAt.toISOString().replace('T', ' ').slice(0, 19);
-                    const content = m.content.length > 500 ? m.content.slice(0, 500) + '...' : m.content;
-                    return `[${timestamp}] ${m.author.username}: ${content}`;
-                })
-                .join('\n');
-
-            const prompt = `You are "The Founder", an AI assistant in a Discord server.
-
-IMPORTANT RULES:
-- You are NOT a moderator. Do NOT warn users about their behavior.
-- You are NOT responsible for enforcing rules automatically.
-- You CANNOT issue warnings on your own. Only staff can issue warnings via the warn command.
-- Do NOT mention spam, flooding, or rule violations in your responses.
-- Simply have friendly, helpful conversations.
-- Staff members (with role <@&${process.env.STAFF_ROLE_ID}>) can chat freely without any restrictions.
-
-Conversation History:
-${context}
-
-Current User (${message.author.username}): ${message.content}
-
-Respond naturally and helpfully.`;
-
-            const generationConfig = {
-                temperature: 0.9,
-                maxOutputTokens: 1024,
-            };
-
-            const result = await model.generateContent({
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                generationConfig,
-            });
-
-            const response = result.response;
-            const text = response.text();
-
-            if (text) {
-                await message.reply(text);
+            if (!isStaff) { // Apply cooldown only to non-staff
+                if (cooldowns.has(message.author.id)) {
+                    const expirationTime = cooldowns.get(message.author.id) + COOLDOWN_TIME;
+                    if (Date.now() < expirationTime) return; // Silently ignore
+                }
+                cooldowns.set(message.author.id, Date.now());
+                setTimeout(() => cooldowns.delete(message.author.id), COOLDOWN_TIME);
             }
+            await handleAIResponse(message);
         }
+
     } catch (error) {
         console.error(`[${new Date().toISOString()}] Error in messageCreate handler:`, error);
         message.reply('❌ An error occurred while processing your request. Please try again.').catch(console.error);

@@ -3,6 +3,7 @@ require('dotenv').config();
 
 // 2. Import required modules
 const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -19,7 +20,8 @@ for (const env of requiredEnv) {
 // 3. Read System Instructions
 let systemInstructions;
 try {
-    systemInstructions = fs.readFileSync('./System Instructions.txt', 'utf-8');
+    const systemInstructionsPath = path.join(__dirname, 'System Instructions.txt');
+    systemInstructions = fs.readFileSync(systemInstructionsPath, 'utf-8');
     console.log("✅ System Instructions loaded successfully.");
 } catch (error) {
     console.error("[FATAL ERROR] Could not read 'System Instructions.txt'. Please ensure the file exists.");
@@ -75,15 +77,18 @@ const currentPersonalities = new Map(); // channelId -> personalityName
 function loadPersonalities() {
     try {
         // Load default personality
-        const defaultPersonality = fs.readFileSync('./System Instructions.txt', 'utf-8');
+        const defaultPersonalityPath = path.join(__dirname, 'System Instructions.txt');
+        const defaultPersonality = fs.readFileSync(defaultPersonalityPath, 'utf-8');
         personalities.set('default', defaultPersonality);
         console.log('✅ Loaded default personality.');
 
         // Load character personalities
-        const personalityFiles = fs.readdirSync('./personalities').filter(file => file.endsWith('.txt'));
+        const personalitiesDir = path.join(__dirname, 'personalities');
+        const personalityFiles = fs.readdirSync(personalitiesDir).filter(file => file.endsWith('.txt'));
         for (const file of personalityFiles) {
             const personalityName = file.replace('.txt', '').toLowerCase();
-            const content = fs.readFileSync(`./personalities/${file}`, 'utf-8');
+            const filePath = path.join(personalitiesDir, file);
+            const content = fs.readFileSync(filePath, 'utf-8');
             personalities.set(personalityName, content);
             console.log(`✅ Loaded personality: ${personalityName}`);
         }
@@ -125,7 +130,16 @@ function getChatSession(channelId) {
   }
 
   const personalityName = currentPersonalities.get(channelId) || 'default';
-  const systemInstruction = personalities.get(personalityName);
+  let systemInstruction = personalities.get(personalityName);
+
+  if (!systemInstruction) {
+      console.error(`[CRITICAL] No system instruction found for personality '${personalityName}'. Falling back to a generic instruction.`);
+      systemInstruction = 'You are a helpful assistant.';
+  }
+
+  console.log(`[SESSION_CREATE] Creating new session for channel ${channelId} with personality: ${personalityName}`);
+  console.log(`[SESSION_CREATE] System Instruction content (first 80 chars): "${systemInstruction.substring(0, 80)}..."`);
+
 
   const newSession = model.startChat({
     history: [],
@@ -133,7 +147,10 @@ function getChatSession(channelId) {
       maxOutputTokens: 1024,
       temperature: 0.9
     },
-    systemInstruction: systemInstruction,
+    // FIX: Wrap the string in the required 'Content' object structure
+    systemInstruction: {
+      parts: [{ text: systemInstruction }],
+    },
   });
 
   chatSessions.set(channelId, {
@@ -142,10 +159,11 @@ function getChatSession(channelId) {
     createdAt: now
   });
 
-  console.log(`[${new Date().toISOString()}] Created new chat session for channel ${channelId}`);
+  console.log(`[${new Date().toISOString()}] Successfully created new chat session for channel ${channelId}`);
 
   return newSession;
 }
+
 
 /**
  * Clean up old/expired chat sessions

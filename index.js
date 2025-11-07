@@ -130,6 +130,47 @@ Respond naturally and helpfully.`;
     }
 }
 
+// --- New Summon Command Function ---
+async function handleSummonCommand(message) {
+  try {
+    const targetUser = message.mentions.users.filter(u => u.id !== client.user.id).first();
+
+    if (!targetUser) {
+      return message.reply('❌ Please mention a user to summon! Example: `@The Founder summon @User`');
+    }
+
+    await message.channel.sendTyping();
+
+    const summonPrompt = `You are a medieval herald making a grand proclamation to summon someone.
+
+Generate a dramatic, theatrical, medieval-style proclamation to summon "${targetUser.username}".
+
+Requirements:
+- Write in old English/medieval style language (thee, thou, hath, etc.)
+- Mention "${targetUser.username}" at least 3-4 times throughout the text
+- Make it dramatic and over-the-top
+- Keep it between 80-120 words
+- Include dramatic phrases like "Hear ye, hear ye!", "By royal decree", "Let it be known"
+- Make it entertaining and fun
+- Do NOT use any markdown formatting
+
+Example tone: "Hear ye, hear ye! By the ancient laws of this realm, we do hereby summon ${targetUser.username}! Let ${targetUser.username} make haste to this channel, for their presence is required most urgently! The court awaits ${targetUser.username} with great anticipation!"
+
+Generate the proclamation now:`;
+
+    const result = await model.generateContent(summonPrompt);
+    const summonText = result.response.text();
+
+    const finalText = summonText.replace(new RegExp(targetUser.username, 'gi'), `<@${targetUser.id}>`);
+
+    await message.channel.send(finalText);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in summon command:`, error);
+    await message.reply('❌ An error occurred while summoning. Please try again.').catch(() => {});
+  }
+}
+
 // Message Create Event
 client.on('messageCreate', async (message) => {
     try {
@@ -200,6 +241,12 @@ client.on('messageCreate', async (message) => {
                     await message.delete();
                 } catch (error) {}
                 await message.channel.send(textToEcho);
+                return;
+            }
+
+            // D) SUMMON COMMAND
+            if (command === 'summon') {
+                await handleSummonCommand(message);
                 return;
             }
         }

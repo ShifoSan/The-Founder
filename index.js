@@ -321,6 +321,12 @@ async function handlePersonaCommand(message, args) {
         return message.reply(`Current personality: **${descriptions[currentPersona].split('(')[0].trim()}** (${personalityEmojis[currentPersona]})`);
     }
 
+    if (subcommand === 'reset' || subcommand === 'default') {
+        currentPersonalities.set(message.channel.id, 'default');
+        clearChatSession(message.channel.id);
+        return message.reply(`🤖 Personality reset to **The Founder** (default).\nConversation history cleared.`);
+    }
+
     if (personalities.has(subcommand)) {
         currentPersonalities.set(message.channel.id, subcommand);
         clearChatSession(message.channel.id);
@@ -330,6 +336,244 @@ async function handlePersonaCommand(message, args) {
         return message.reply(`❌ Personality '${subcommand}' not found. Use \`@The Founder persona list\` to see available options.`);
     }
 }
+
+// --- Help Command Functions ---
+
+/**
+ * Handle help command with clean embeds
+ */
+async function handleHelpCommand(message, content) {
+  try {
+    // Extract subcommand if provided
+    const args = content.split(/\s+/).filter(arg => arg.length > 0);
+    const subcommand = args[1]?.toLowerCase() || 'overview';
+
+    let embeds = [];
+
+    switch (subcommand) {
+      case 'moderation':
+        embeds = [createModerationEmbed()];
+        break;
+      case 'persona':
+        embeds = [createPersonaEmbed()];
+        break;
+      case 'ai':
+        embeds = [createAIEmbed()];
+        break;
+      case 'all':
+        embeds = [
+          createOverviewEmbed(),
+          createModerationEmbed(),
+          createPersonaEmbed(),
+          createAIEmbed(),
+          createStatusEmbed()
+        ];
+        break;
+      case 'overview':
+      default:
+        embeds = [createOverviewEmbed()];
+        break;
+    }
+
+    // Send embeds
+    await message.reply({ embeds: embeds });
+
+    console.log(`[${new Date().toISOString()}] Help command used: ${subcommand}`);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in help command:`, error);
+    await message.reply('❌ Error displaying help. Please try again.').catch(() => {});
+  }
+}
+
+/**
+ * Create Overview Embed
+ */
+function createOverviewEmbed() {
+  return {
+    title: '🤖 The Founder Bot - Complete Guide',
+    description: 'Your AI-powered moderation and personality-switching assistant!',
+    color: 0xFF0000, // Red
+    fields: [
+      {
+        name: '🛡️ Moderation Commands',
+        value: '`purge` `warn` `say` `summon`\n\nType: `@The Founder help moderation`',
+        inline: false
+      },
+      {
+        name: '🎭 Personality System',
+        value: 'Switch between 4 Attack on Titan characters\n\nType: `@The Founder help persona`',
+        inline: false
+      },
+      {
+        name: '💬 AI Features',
+        value: 'Smart conversation, advanced memory, auto-replies\n\nType: `@The Founder help ai`',
+        inline: false
+      },
+      {
+        name: '📊 Rotating Status',
+        value: 'Bot status changes every 2 minutes with unhinged AoT facts!',
+        inline: false
+      },
+      {
+        name: '📖 View All',
+        value: 'Type: `@The Founder help all`',
+        inline: false
+      }
+    ],
+    footer: {
+      text: 'The Founder Bot v2.0 | Attack on Titan Themed',
+      icon_url: client.user.displayAvatarURL()
+    },
+    timestamp: new Date()
+  };
+}
+
+/**
+ * Create Moderation Embed
+ */
+function createModerationEmbed() {
+  return {
+    title: '🛡️ Moderation Commands',
+    description: 'Staff and user moderation tools',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '⚔️ purge <number>',
+        value: 'Remove up to 100 messages\n**Permission:** Staff only\n**Usage:** `@The Founder purge 50`',
+        inline: false
+      },
+      {
+        name: '⚠️ warn @user <reason>',
+        value: 'Issue formal warning\n**Permission:** Staff only\n**Logged:** Staff channel\n**Usage:** `@The Founder warn @user spamming`',
+        inline: false
+      },
+      {
+        name: '💬 say <message>',
+        value: 'Echo text as the bot\n**Permission:** Anyone\n**Usage:** `@The Founder say Hello!`',
+        inline: false
+      },
+      {
+        name: '📢 summon @user',
+        value: 'Dramatically summon someone\n**Permission:** Anyone\n**Usage:** `@The Founder summon @user`\n**Bonus:** Generates theatrical medieval text!',
+        inline: false
+      }
+    ],
+    footer: { text: 'Staff commands marked with Staff only' },
+    timestamp: new Date()
+  };
+}
+
+/**
+ * Create Personality Embed
+ */
+function createPersonaEmbed() {
+  return {
+    title: '🎭 Personality System',
+    description: 'Switch bot personalities per channel!',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: 'Available Personalities',
+        value: '⚔️ **Eren** - Determined, cold, freedom-obsessed\n🧣 **Mikasa** - Stoic, protective, loyal\n☕ **Levi** - Blunt, clean freak, skilled\n👑 **Ymir** - Tragic, gentle, seeking freedom\n🤖 **Default** - The Founder (standard)',
+        inline: false
+      },
+      {
+        name: 'How to Switch',
+        value: '`@The Founder persona eren`\n`@The Founder persona mikasa`\n`@The Founder persona levi`\n`@The Founder persona ymir`\n`@The Founder persona default` (reset)',
+        inline: false
+      },
+      {
+        name: 'Useful Commands',
+        value: '`@The Founder persona list` - Show all personalities\n`@The Founder persona` - Show current personality\n`@The Founder persona reset` - Back to default',
+        inline: false
+      },
+      {
+        name: '⚙️ Info',
+        value: 'Each personality has unique speech patterns and behavior\nPer-channel setting (different channels can have different personalities)\nConversation history resets when switching',
+        inline: false
+      }
+    ],
+    footer: { text: 'Each personality is canon-accurate to Attack on Titan' },
+    timestamp: new Date()
+  };
+}
+
+/**
+ * Create AI Features Embed
+ */
+function createAIEmbed() {
+  return {
+    title: '💬 AI Chat Features',
+    description: 'Powered by Google Gemini AI',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '🧠 Smart Memory System',
+        value: 'Remembers 20-30+ conversation turns per channel\nBot remembers its own responses\nContext maintained across multiple messages\nSessions auto-clear after 48 hours',
+        inline: false
+      },
+      {
+        name: '💭 Natural Conversations',
+        value: 'Advanced AI understanding\nContext-aware responses\nPersonality-matched replies\nSupports all active personalities',
+        inline: false
+      },
+      {
+        name: '📍 Auto-Reply Channel',
+        value: `Channel: <#${process.env.AI_CHANNEL_ID}>\nBot auto-responds to all messages\nNo mention needed - just chat naturally!\nBuilt-in 3-second cooldown for non-staff`,
+        inline: false
+      },
+      {
+        name: '⚙️ Performance',
+        value: 'Response time: ~1 second\nAPI optimized: 50% fewer calls\nMemory efficient: 512MB RAM\nAlways online on Render',
+        inline: false
+      }
+    ],
+    footer: { text: 'Powered by Gemini 2.5 Flash Lite' },
+    timestamp: new Date()
+  };
+}
+
+/**
+ * Create Server Status Embed
+ */
+function createStatusEmbed() {
+  return {
+    title: '📊 Bot & Server Status',
+    description: 'Current deployment and features',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '✅ Bot Status',
+        value: 'Status: **Online**\nUptime: Always active\nDeployment: Render (Free Tier)',
+        inline: true
+      },
+      {
+        name: '🔄 Rotating Status',
+        value: 'Changes every 2 minutes\n12 unhinged AoT facts\nCheck bot profile to see them!',
+        inline: true
+      },
+      {
+        name: '🎮 Server Theme',
+        value: 'Server: The Paradis Legion\nTheme: Attack on Titan\nCommunity: 500+ members',
+        inline: true
+      },
+      {
+        name: '📦 Resources',
+        value: 'RAM: 512 MB (30% usage)\nAI Model: Gemini 2.5 Flash Lite\nBot Version: v2.0',
+        inline: true
+      },
+      {
+        name: '🚀 Features Active',
+        value: '✅ Moderation commands\n✅ Personality switching\n✅ AI chat with memory\n✅ Rotating status\n✅ Staff logs',
+        inline: false
+      }
+    ],
+    footer: { text: 'Last updated: November 7, 2025' },
+    timestamp: new Date()
+  };
+}
+
 
 // Message Create Event
 client.on('messageCreate', async (message) => {
@@ -428,6 +672,12 @@ client.on('messageCreate', async (message) => {
             // F) PERSONA COMMAND
             if (command === 'persona') {
                 await handlePersonaCommand(message, args);
+                return;
+            }
+
+            // G) HELP COMMAND
+            if (command === 'help') {
+                await handleHelpCommand(message, commandContent);
                 return;
             }
         }

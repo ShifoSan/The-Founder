@@ -75,59 +75,109 @@ console.log("✅ Gemini AI Model initialized successfully.");
 const cooldowns = new Map();
 const COOLDOWN_TIME = 3000; // 3 seconds
 
+// Chat session storage with metadata
+const chatSessions = new Map(); // channelId -> { session, lastActivity }
+
+// Configuration
+const AI_CHANNEL_ID = process.env.AI_CHANNEL_ID || '1434115853422432379';
+const SESSION_TIMEOUT = 48 * 60 * 60 * 1000; // 48 hours
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Get or create a chat session for a channel
+ * @param {string} channelId - Discord channel ID
+ * @returns {ChatSession} Gemini chat session
+ */
+function getChatSession(channelId) {
+  const now = Date.now();
+
+  if (chatSessions.has(channelId)) {
+    const sessionData = chatSessions.get(channelId);
+    sessionData.lastActivity = now;
+    return sessionData.session;
+  }
+
+  const newSession = model.startChat({
+    history: [],
+    generationConfig: {
+      maxOutputTokens: 1024,
+      temperature: 0.9
+    }
+  });
+
+  chatSessions.set(channelId, {
+    session: newSession,
+    lastActivity: now,
+    createdAt: now
+  });
+
+  console.log(`[${new Date().toISOString()}] Created new chat session for channel ${channelId}`);
+
+  return newSession;
+}
+
+/**
+ * Clean up old/expired chat sessions
+ */
+function cleanupOldSessions() {
+  const now = Date.now();
+  let removedCount = 0;
+
+  for (const [channelId, sessionData] of chatSessions.entries()) {
+    const sessionAge = now - sessionData.lastActivity;
+
+    if (sessionAge > SESSION_TIMEOUT) {
+      chatSessions.delete(channelId);
+      removedCount++;
+      console.log(`[${new Date().toISOString()}] Removed expired session for channel ${channelId} (age: ${Math.round(sessionAge / 1000 / 60 / 60)} hours)`);
+    }
+  }
+
+  if (removedCount > 0) {
+    console.log(`[${new Date().toISOString()}] Cleanup complete: Removed ${removedCount} expired session(s). Active sessions: ${chatSessions.size}`);
+  }
+}
+
+/**
+ * Clear a specific channel's session (useful for reset command)
+ * @param {string} channelId - Discord channel ID
+ */
+function clearChatSession(channelId) {
+  if (chatSessions.has(channelId)) {
+    chatSessions.delete(channelId);
+    console.log(`[${new Date().toISOString()}] Cleared chat session for channel ${channelId}`);
+    return true;
+  }
+  return false;
+}
+
 // --- Reusable AI Response Function ---
 async function handleAIResponse(message) {
-    try {
-        await message.channel.sendTyping();
+  try {
+    const channelId = message.channel.id;
 
-        const messages = await message.channel.messages.fetch({ limit: 15 });
-        const context = messages
-            .filter(m => !m.author.bot && m.content.length > 0)
-            .reverse()
-            .map(m => {
-                const timestamp = m.createdAt.toISOString().replace('T', ' ').slice(0, 19);
-                const content = m.content.length > 500 ? m.content.slice(0, 500) + '...' : m.content;
-                return `[${timestamp}] ${m.author.username}: ${content}`;
-            })
-            .join('\n');
+    await message.channel.sendTyping();
 
-        const prompt = `You are "The Founder", an AI assistant in a Discord server.
+    const chat = getChatSession(channelId);
 
-IMPORTANT RULES:
-- You are NOT a moderator. Do NOT warn users about their behavior.
-- You are NOT responsible for enforcing rules automatically.
-- You CANNOT issue warnings on your own. Only staff can issue warnings via the warn command.
-- Do NOT mention spam, flooding, or rule violations in your responses.
-- Simply have friendly, helpful conversations.
-- Staff members (with role <@&${process.env.STAFF_ROLE_ID}>) can chat freely without any restrictions.
+    const result = await chat.sendMessage(message.content);
+    const response = result.response.text();
 
-Conversation History:
-${context}
+    await message.reply(response);
 
-Current User (${message.author.username}): ${message.content}
+    console.log(`[${new Date().toISOString()}] AI Response sent in channel ${channelId} (${message.author.username})`);
 
-Respond naturally and helpfully.`;
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in AI response:`, error);
 
-        const generationConfig = {
-            temperature: 0.9,
-            maxOutputTokens: 1024,
-        };
-
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig,
-        });
-
-        const response = result.response;
-        const text = response.text();
-
-        if (text) {
-            await message.reply(text);
-        }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error in handleAIResponse:`, error);
-        message.reply('❌ An error occurred while generating an AI response.').catch(console.error);
+    if (error.message?.includes('SAFETY')) {
+      await message.reply('⚠️ I cannot respond to that due to safety filters.').catch(() => {});
+    } else if (error.message?.includes('RATE_LIMIT')) {
+      await message.reply('⚠️ I\'m receiving too many requests. Please wait a moment.').catch(() => {});
+    } else {
+      await message.reply('❌ An error occurred while processing your message. Please try again.').catch(() => {});
     }
+  }
 }
 
 // --- New Summon Command Function ---
@@ -198,7 +248,8 @@ client.on('messageCreate', async (message) => {
                 const messagesToDelete = await message.channel.messages.fetch({ limit: deleteCount + 1 });
                 const deletedMessages = await message.channel.bulkDelete(messagesToDelete, true);
 
-                const confirmMsg = await message.channel.send(`✅ Successfully deleted ${deletedMessages.size - 1} messages.`);
+                const numDeleted = deletedMessages.size > 0 ? deletedMessages.size - 1 : 0;
+                const confirmMsg = await message.channel.send(`✅ Successfully deleted ${numDeleted} message(s).`);
                 setTimeout(() => confirmMsg.delete().catch(() => {}), 5000);
                 return;
             }
@@ -249,6 +300,20 @@ client.on('messageCreate', async (message) => {
                 await handleSummonCommand(message);
                 return;
             }
+
+            // E) RESET COMMAND
+            if (command === 'reset' || command === 'restart') {
+              if (!isStaff) {
+                return message.reply('❌ Only staff members can reset conversations.');
+              }
+
+              const channelId = message.channel.id;
+              if (clearChatSession(channelId)) {
+                return message.reply('✅ Conversation history reset! Starting fresh.');
+              } else {
+                return message.reply('ℹ️ No active conversation to reset.');
+              }
+            }
         }
 
         // --- AI Auto-Reply ---
@@ -273,8 +338,20 @@ client.on('messageCreate', async (message) => {
 
 // 7. Bot Ready Event
 client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-    client.user.setActivity('Listening to messages', { type: 'LISTENING' });
+  console.log(`✅ Bot logged in as ${client.user.tag}`);
+  console.log(`✅ Using gemini-2.5-flash-lite model`);
+
+  client.user.setPresence({
+    activities: [{ name: 'messages in AI channel', type: 4 }],
+    status: 'online'
+  });
+
+  setInterval(() => {
+    cleanupOldSessions();
+  }, CLEANUP_INTERVAL);
+
+  console.log(`✅ Session cleanup scheduled (runs every ${CLEANUP_INTERVAL / 1000 / 60} minutes)`);
+  console.log(`✅ Bot is ready! Monitoring channel: ${AI_CHANNEL_ID}`);
 });
 
 // 8. Bot Login

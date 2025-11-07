@@ -276,13 +276,15 @@ async function handlePersonaCommand(message, args) {
         'default': '🤖',
         'eren': '⚔️',
         'mikasa': '🧣',
-        'levi': '☕'
+        'levi': '☕',
+        'ymir': '👑'
     };
     const descriptions = {
         'default': 'The Founder (standard moderation bot)',
         'eren': 'Eren Yeager (determined, cold, freedom-obsessed)',
         'mikasa': 'Mikasa Ackerman (stoic, protective, loyal)',
-        'levi': 'Levi Ackerman (blunt, clean freak, skilled)'
+        'levi': 'Levi Ackerman (blunt, clean freak, skilled)',
+        'ymir': 'Ymir Fritz (tragic, gentle, seeking freedom)'
     };
 
     const subcommand = args[0] ? args[0].toLowerCase() : '';

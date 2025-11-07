@@ -65,11 +65,38 @@ console.log("✅ Discord Client initialized.");
 
 // 6. Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash-lite',
-  systemInstruction: systemInstructions,
-});
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 console.log("✅ Gemini AI Model initialized successfully.");
+
+// --- Personality Management ---
+const personalities = new Map();
+const currentPersonalities = new Map(); // channelId -> personalityName
+
+function loadPersonalities() {
+    try {
+        // Load default personality
+        const defaultPersonality = fs.readFileSync('./System Instructions.txt', 'utf-8');
+        personalities.set('default', defaultPersonality);
+        console.log('✅ Loaded default personality.');
+
+        // Load character personalities
+        const personalityFiles = fs.readdirSync('./personalities').filter(file => file.endsWith('.txt'));
+        for (const file of personalityFiles) {
+            const personalityName = file.replace('.txt', '').toLowerCase();
+            const content = fs.readFileSync(`./personalities/${file}`, 'utf-8');
+            personalities.set(personalityName, content);
+            console.log(`✅ Loaded personality: ${personalityName}`);
+        }
+    } catch (error) {
+        console.error('⚠️ Could not load personalities. Falling back to default only.', error);
+        if (!personalities.has('default')) {
+            // A failsafe if even the default is missing
+             personalities.set('default', 'You are a helpful AI assistant.');
+        }
+    }
+}
+
+loadPersonalities();
 
 // Cooldown management
 const cooldowns = new Map();
@@ -97,12 +124,16 @@ function getChatSession(channelId) {
     return sessionData.session;
   }
 
+  const personalityName = currentPersonalities.get(channelId) || 'default';
+  const systemInstruction = personalities.get(personalityName);
+
   const newSession = model.startChat({
     history: [],
     generationConfig: {
       maxOutputTokens: 1024,
       temperature: 0.9
-    }
+    },
+    systemInstruction: systemInstruction,
   });
 
   chatSessions.set(channelId, {
@@ -221,6 +252,47 @@ Generate the proclamation now:`;
   }
 }
 
+// --- New Persona Command Function ---
+async function handlePersonaCommand(message, args) {
+    const personalityEmojis = {
+        'default': '🤖',
+        'eren': '⚔️',
+        'mikasa': '🧣',
+        'levi': '☕'
+    };
+    const descriptions = {
+        'default': 'The Founder (standard moderation bot)',
+        'eren': 'Eren Yeager (determined, cold, freedom-obsessed)',
+        'mikasa': 'Mikasa Ackerman (stoic, protective, loyal)',
+        'levi': 'Levi Ackerman (blunt, clean freak, skilled)'
+    };
+
+    const subcommand = args[0] ? args[0].toLowerCase() : '';
+
+    if (subcommand === 'list') {
+        let list = '📋 **Available Personalities:**\n\n';
+        for (const [name, desc] of Object.entries(descriptions)) {
+            list += `${personalityEmojis[name]} **${name}** - ${desc}\n`;
+        }
+        list += `\nUsage: \`@The Founder persona <name>\`\nExample: \`@The Founder persona eren\``;
+        return message.reply(list);
+    }
+
+    if (!subcommand) {
+        const currentPersona = currentPersonalities.get(message.channel.id) || 'default';
+        return message.reply(`Current personality: **${descriptions[currentPersona].split('(')[0].trim()}** (${personalityEmojis[currentPersona]})`);
+    }
+
+    if (personalities.has(subcommand)) {
+        currentPersonalities.set(message.channel.id, subcommand);
+        clearChatSession(message.channel.id);
+        const personaName = descriptions[subcommand].split('(')[0].trim();
+        return message.reply(`${personalityEmojis[subcommand]} Personality switched to **${personaName}**!\nConversation history reset.`);
+    } else {
+        return message.reply(`❌ Personality '${subcommand}' not found. Use \`@The Founder persona list\` to see available options.`);
+    }
+}
+
 // Message Create Event
 client.on('messageCreate', async (message) => {
     try {
@@ -313,6 +385,12 @@ client.on('messageCreate', async (message) => {
               } else {
                 return message.reply('ℹ️ No active conversation to reset.');
               }
+            }
+
+            // F) PERSONA COMMAND
+            if (command === 'persona') {
+                await handlePersonaCommand(message, args);
+                return;
             }
         }
 

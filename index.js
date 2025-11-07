@@ -4,6 +4,24 @@ require('dotenv').config();
 // 2. Import required modules
 const fs = require('fs');
 const path = require('path');
+
+// AoT Facts for rotating status
+const aotStatuses = [
+  "⚔️ Armin's bullies crushed by debris seconds after Colossal Titan breached Wall Maria",
+  "🍷 Isayama created Titans after drunk grabbed him at internet cafe, inspired by fear",
+  "🌀 Number 13 cursed: Titan lifespan, Wall Maria yr 845÷13, 104th Corps÷13, Erwin 13th",
+  "👁️ Attack Titan has mysterious 3rd eyelid that appears only once in the entire series",
+  "🧠 Reiner transferred consciousness from human body to Titan nervous system to survive",
+  "🥔 Sasha was supposed to die Volume 9, Clash of Titans but Isayama changed his mind",
+  "🗺️ AoT world geography inverted: Paradis = Madagascar, Marley = Africa upside down",
+  "💀 Armin's first kill was human soldier, not Titan—ironic for 'Attack on Titan'",
+  "👓 Hanji's eyesight so bad she can't tell Jean apart from Reiner without glasses",
+  "💁 Isayama designed Historia's appearance & personality before deciding her story",
+  "📉 Ymir sabotaged training so Historia would rank in top 10 graduates instead",
+  "🦗 Early manga Scouts leaped 10m like grasshoppers, no ODM gear used back then"
+];
+
+let currentStatusIndex = 0;
 const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -434,15 +452,36 @@ client.on('messageCreate', async (message) => {
 });
 
 
+/**
+ * Update bot status with rotating unhinged AoT facts
+ */
+function updateStatus() {
+  const status = aotStatuses[currentStatusIndex];
+
+  client.user.setPresence({
+    activities: [{
+      name: status,
+      type: 4 // Custom status
+    }],
+    status: 'online'
+  });
+
+  console.log(`[${new Date().toISOString()}] 📺 Status updated: ${status}`);
+
+  // Move to next status (cycle back to start at end)
+  currentStatusIndex = (currentStatusIndex + 1) % aotStatuses.length;
+}
+
 // 7. Bot Ready Event
 client.once('ready', () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`✅ Using gemini-2.5-flash-lite model`);
 
-  client.user.setPresence({
-    activities: [{ name: 'messages in AI channel', type: 4 }],
-    status: 'online'
-  });
+  // Start status rotation
+  updateStatus(); // Set initial status
+  setInterval(updateStatus, 120000); // Rotate every 2 minutes
+
+  console.log(`✅ Status rotation started (changes every 2 minutes).`);
 
   setInterval(() => {
     cleanupOldSessions();

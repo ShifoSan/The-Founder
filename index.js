@@ -555,7 +555,7 @@ function createStatusEmbed() {
       },
       {
         name: '🎮 Server Theme',
-        value: 'Server: The Paradis Legion\nTheme: Attack on Titan\nCommunity: 500+ members',
+        value: 'Server: The Paradis Legion\nTheme: Attack on Titan\nCommunity: 200+ members',
         inline: true
       },
       {

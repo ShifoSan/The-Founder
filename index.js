@@ -22,6 +22,153 @@ const aotStatuses = [
 ];
 
 let currentStatusIndex = 0;
+
+const GUILD_ID = '1316791123422740572'; // The Paradis Legion server ID
+
+const slashCommands = [
+  {
+    name: 'purge',
+    description: 'Delete multiple messages from channel (Staff only)',
+    options: [
+      {
+        name: 'amount',
+        description: 'Number of messages to delete (1-100)',
+        type: 4, // INTEGER
+        required: true,
+        min_value: 1,
+        max_value: 100
+      }
+    ]
+  },
+  {
+    name: 'warn',
+    description: 'Issue warning to a user (Staff only)',
+    options: [
+      {
+        name: 'user',
+        description: 'User to warn',
+        type: 6, // USER
+        required: true
+      },
+      {
+        name: 'reason',
+        description: 'Reason for warning',
+        type: 3, // STRING
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'say',
+    description: 'Make the bot say something',
+    options: [
+      {
+        name: 'message',
+        description: 'Message to echo',
+        type: 3, // STRING
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'summon',
+    description: 'Dramatically summon a user',
+    options: [
+      {
+        name: 'user',
+        description: 'User to summon',
+        type: 6, // USER
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'persona',
+    description: 'Switch bot personality or view current',
+    options: [
+      {
+        name: 'name',
+        description: 'Personality name (eren, mikasa, levi, ymir, default) or leave empty to view',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: 'Default (The Founder)', value: 'default' },
+          { name: 'Eren Yeager', value: 'eren' },
+          { name: 'Mikasa Ackerman', value: 'mikasa' },
+          { name: 'Levi Ackerman', value: 'levi' },
+          { name: 'Ymir Fritz', value: 'ymir' }
+        ]
+      },
+      {
+        name: 'action',
+        description: 'Special actions',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: 'List all personalities', value: 'list' },
+          { name: 'Reset to default', value: 'reset' }
+        ]
+      }
+    ]
+  },
+  {
+    name: 'help',
+    description: 'Show bot help menu',
+    options: [
+      {
+        name: 'category',
+        description: 'Help category to view',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: 'Overview', value: 'overview' },
+          { name: 'Moderation', value: 'moderation' },
+          { name: 'Personality System', value: 'persona' },
+          { name: 'AI Features', value: 'ai' },
+          { name: 'Game Commands', value: 'game' },
+          { name: 'All Categories', value: 'all' }
+        ]
+      }
+    ]
+  },
+  {
+    name: 'survival',
+    description: 'Check survival odds in Attack on Titan world',
+    options: [
+      {
+        name: 'user',
+        description: 'Target user (leave empty for yourself)',
+        type: 6, // USER
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'titan',
+    description: 'Get assigned a random Titan Shifter type',
+    options: [
+      {
+        name: 'user',
+        description: 'Target user (leave empty for yourself)',
+        type: 6, // USER
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'stats',
+    description: 'View Attack on Titan RPG stats',
+    options: [
+      {
+        name: 'user',
+        description: 'Target user (leave empty for yourself)',
+        type: 6, // USER
+        required: false
+      }
+    ]
+  }
+];
+
 const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -290,31 +437,43 @@ Generate the proclamation now:`;
 }
 
 // --- New Persona Command Function ---
+const personalityEmojis = {
+    'default': '🤖',
+    'eren': '⚔️',
+    'mikasa': '🧣',
+    'levi': '☕',
+    'ymir': '👑'
+};
+const descriptions = {
+    'default': 'The Founder (standard moderation bot)',
+    'eren': 'Eren Yeager (determined, cold, freedom-obsessed)',
+    'mikasa': 'Mikasa Ackerman (stoic, protective, loyal)',
+    'levi': 'Levi Ackerman (blunt, clean freak, skilled)',
+    'ymir': 'Ymir Fritz (tragic, gentle, seeking freedom)'
+};
+const availablePersonalities = Object.keys(descriptions);
+
+function createPersonaListEmbed() {
+    let list = '📋 **Available Personalities:**\n\n';
+    for (const [name, desc] of Object.entries(descriptions)) {
+        list += `${personalityEmojis[name]} **${name}** - ${desc}\n`;
+    }
+    list += `\nUsage: \`/persona name: <name>\`\nExample: \`/persona name: eren\``;
+    return {
+        title: '🎭 Available Personalities',
+        description: list,
+        color: 0xFF0000,
+        footer: { text: 'Use the /persona command to switch!' }
+    };
+}
+
 async function handlePersonaCommand(message, args) {
-    const personalityEmojis = {
-        'default': '🤖',
-        'eren': '⚔️',
-        'mikasa': '🧣',
-        'levi': '☕',
-        'ymir': '👑'
-    };
-    const descriptions = {
-        'default': 'The Founder (standard moderation bot)',
-        'eren': 'Eren Yeager (determined, cold, freedom-obsessed)',
-        'mikasa': 'Mikasa Ackerman (stoic, protective, loyal)',
-        'levi': 'Levi Ackerman (blunt, clean freak, skilled)',
-        'ymir': 'Ymir Fritz (tragic, gentle, seeking freedom)'
-    };
 
     const subcommand = args[0] ? args[0].toLowerCase() : '';
 
     if (subcommand === 'list') {
-        let list = '📋 **Available Personalities:**\n\n';
-        for (const [name, desc] of Object.entries(descriptions)) {
-            list += `${personalityEmojis[name]} **${name}** - ${desc}\n`;
-        }
-        list += `\nUsage: \`@The Founder persona <name>\`\nExample: \`@The Founder persona eren\``;
-        return message.reply(list);
+        const embed = createPersonaListEmbed();
+        return message.reply({ embeds: [embed] });
     }
 
     if (!subcommand) {
@@ -625,13 +784,11 @@ function createStatusEmbed() {
 // --- Game Command Functions ---
 
 /**
- * Handle survival command
+ * Generate survival embed
+ * @param {User} targetUser - The user to generate the embed for
+ * @returns {object} The embed object
  */
-async function handleSurvivalCommand(message, args) {
-  try {
-    // Determine target user
-    const targetUser = message.mentions.users.first() || message.author;
-
+function generateSurvivalEmbed(targetUser) {
     // Generate random stats
     const combat = Math.floor(Math.random() * 100) + 1;
     const strategy = Math.floor(Math.random() * 100) + 1;
@@ -658,7 +815,7 @@ async function handleSurvivalCommand(message, args) {
     }
 
     // Create embed
-    const embed = {
+    return {
       title: `📊 ${targetUser.username}'s Survival Chance Analysis`,
       color: 0xFFA500,
       fields: [
@@ -675,10 +832,17 @@ async function handleSurvivalCommand(message, args) {
       footer: { text: 'Results are randomly generated for entertainment' },
       timestamp: new Date()
     };
+}
 
+/**
+ * Handle survival command (message-based)
+ */
+async function handleSurvivalCommand(message, args) {
+  try {
+    const targetUser = message.mentions.users.first() || message.author;
+    const embed = generateSurvivalEmbed(targetUser);
     await message.reply({ embeds: [embed] });
     console.log(`[${new Date().toISOString()}] Survival command used for ${targetUser.username}`);
-
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in survival command:`, error);
     await message.reply('❌ Error calculating survival odds. Try again!').catch(() => {});
@@ -686,14 +850,11 @@ async function handleSurvivalCommand(message, args) {
 }
 
 /**
- * Handle titan command
+ * Generate titan embed
+ * @param {User} targetUser - The user to generate the embed for
+ * @returns {object} The embed object
  */
-async function handleTitanCommand(message, args) {
-  try {
-    // Determine target user
-    const targetUser = message.mentions.users.first() || message.author;
-
-    // Titan types array
+function generateTitanEmbed(targetUser) {
     const titans = [
       { name: 'Colossal Titan', emoji: '🔥', height: '60 meters', ability: 'Steam emission & explosive transformation', weakness: 'Extremely slow movement speed', power: 95 },
       { name: 'Armored Titan', emoji: '🛡️', height: '15 meters', ability: 'Hardened armor plating', weakness: 'Reduced speed when armored', power: 88 },
@@ -706,11 +867,9 @@ async function handleTitanCommand(message, args) {
       { name: 'Founding Titan', emoji: '👑', height: 'Variable', ability: 'Control all Titans & alter Eldian bodies', weakness: 'Requires royal blood to use fully', power: 100 }
     ];
 
-    // Random selection
     const selectedTitan = titans[Math.floor(Math.random() * titans.length)];
 
-    // Create embed
-    const embed = {
+    return {
       title: `${selectedTitan.emoji} ${targetUser.username} has inherited the ${selectedTitan.name}!`,
       color: 0xFF0000,
       fields: [
@@ -723,10 +882,17 @@ async function handleTitanCommand(message, args) {
       footer: { text: '"With great power comes great responsibility. Use it wisely, soldier."' },
       timestamp: new Date()
     };
+}
 
+/**
+ * Handle titan command (message-based)
+ */
+async function handleTitanCommand(message, args) {
+  try {
+    const targetUser = message.mentions.users.first() || message.author;
+    const embed = generateTitanEmbed(targetUser);
     await message.reply({ embeds: [embed] });
-    console.log(`[${new Date().toISOString()}] Titan command used: ${selectedTitan.name} for ${targetUser.username}`);
-
+    console.log(`[${new Date().toISOString()}] Titan command used for ${targetUser.username}`);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in titan command:`, error);
     await message.reply('❌ Error assigning Titan. Try again!').catch(() => {});
@@ -734,14 +900,11 @@ async function handleTitanCommand(message, args) {
 }
 
 /**
- * Handle stats command
+ * Generate stats embed
+ * @param {User} targetUser - The user to generate the embed for
+ * @returns {object} The embed object
  */
-async function handleStatsCommand(message, args) {
-  try {
-    // Determine target user
-    const targetUser = message.mentions.users.first() || message.author;
-
-    // Generate random stats
+function generateStatsEmbed(targetUser) {
     const combat = Math.floor(Math.random() * 100) + 1;
     const strategy = Math.floor(Math.random() * 100) + 1;
     const speed = Math.floor(Math.random() * 100) + 1;
@@ -751,10 +914,8 @@ async function handleStatsCommand(message, args) {
     const stamina = Math.floor(Math.random() * 100) + 1;
     const leadership = Math.floor(Math.random() * 100) + 1;
 
-    // Calculate total
     const total = combat + strategy + speed + defense + strength + accuracy + stamina + leadership;
 
-    // Determine class based on highest stat
     const stats = { combat, strategy, speed, defense, strength, accuracy, stamina, leadership };
     const maxStat = Math.max(...Object.values(stats));
     let characterClass, specialty;
@@ -776,7 +937,6 @@ async function handleStatsCommand(message, args) {
       specialty = 'Balanced abilities across all fields';
     }
 
-    // Determine rank based on total
     let rank;
     if (total <= 300) { rank = 'Trainee'; }
     else if (total <= 450) { rank = 'Soldier'; }
@@ -785,8 +945,7 @@ async function handleStatsCommand(message, args) {
     else if (total <= 750) { rank = 'Squad Leader'; }
     else { rank = 'Commander'; }
 
-    // Create embed
-    const embed = {
+    return {
       title: `📊 ${targetUser.username}'s Attack on Titan Stats`,
       color: 0x0099FF,
       fields: [
@@ -807,14 +966,245 @@ async function handleStatsCommand(message, args) {
       footer: { text: '"Your stats show promise. Keep training, soldier!"' },
       timestamp: new Date()
     };
+}
 
+/**
+ * Handle stats command (message-based)
+ */
+async function handleStatsCommand(message, args) {
+  try {
+    const targetUser = message.mentions.users.first() || message.author;
+    const embed = generateStatsEmbed(targetUser);
     await message.reply({ embeds: [embed] });
     console.log(`[${new Date().toISOString()}] Stats command used for ${targetUser.username}`);
-
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in stats command:`, error);
     await message.reply('❌ Error generating stats. Try again!').catch(() => {});
   }
+}
+
+
+// --- Slash Command Handlers ---
+
+async function handleSlashPurge(interaction) {
+  const amount = interaction.options.getInteger('amount');
+  const staffRoleId = process.env.STAFF_ROLE_ID;
+
+  // Check staff permission
+  if (!interaction.member.roles.cache.has(staffRoleId)) {
+    return interaction.reply({
+      content: '❌ This command is staff only.',
+      ephemeral: true
+    });
+  }
+
+  try {
+    const deleted = await interaction.channel.bulkDelete(amount, true);
+
+    await interaction.reply({
+      content: `✅ Successfully deleted ${deleted.size} messages.`,
+      ephemeral: true
+    });
+  } catch (error) {
+    await interaction.reply({
+      content: '❌ Failed to delete messages. They might be too old (14+ days).',
+      ephemeral: true
+    });
+  }
+}
+
+async function handleSlashWarn(interaction) {
+  const targetUser = interaction.options.getUser('user');
+  const reason = interaction.options.getString('reason');
+  const staffRoleId = process.env.STAFF_ROLE_ID;
+  const staffLogChannel = process.env.STAFF_LOG_CHANNEL;
+
+  // Check staff permission
+  if (!interaction.member.roles.cache.has(staffRoleId)) {
+    return interaction.reply({
+      content: '❌ This command is staff only.',
+      ephemeral: true
+    });
+  }
+
+  // Check if target is staff
+  const targetMember = interaction.guild.members.cache.get(targetUser.id);
+  if (targetMember?.roles.cache.has(staffRoleId)) {
+    return interaction.reply({
+      content: '❌ You cannot warn staff members.',
+      ephemeral: true
+    });
+  }
+
+  // Check if target is bot
+  if (targetUser.bot) {
+    return interaction.reply({
+      content: '❌ You cannot warn bots.',
+      ephemeral: true
+    });
+  }
+
+  // Create warning embed
+  const warnEmbed = {
+    title: '⚠️ Rule Violation Warning',
+    description: `Attention **${targetUser.tag}**, a warning has been issued for **${reason}**.
+
+Please review the server rules to ensure compliance and maintain a positive environment for all Legionaries. This is a reminder to uphold the standards that make our community strong.`,
+    color: 0xFFA500,
+    footer: { text: 'Stay vigilant, Legionaries!' },
+    timestamp: new Date()
+  };
+
+  await interaction.reply({ embeds: [warnEmbed] });
+
+  // Log to staff channel
+  const logChannel = interaction.guild.channels.cache.get(staffLogChannel);
+  if (logChannel) {
+    const logEmbed = {
+      title: '📋 Warning Issued',
+      fields: [
+        { name: 'User', value: `${targetUser.tag} (${targetUser.id})`, inline: true },
+        { name: 'Moderator', value: interaction.user.tag, inline: true },
+        { name: 'Reason', value: reason, inline: false }
+      ],
+      color: 0xFFA500,
+      timestamp: new Date()
+    };
+
+    await logChannel.send({ embeds: [logEmbed] });
+  }
+}
+
+async function handleSlashSay(interaction) {
+  const message = interaction.options.getString('message');
+
+  await interaction.channel.send({ content: message });
+  await interaction.reply({ content: '✅ Message sent.', ephemeral: true });
+}
+
+async function handleSlashSummon(interaction) {
+  const targetUser = interaction.options.getUser('user');
+
+  try {
+    const prompt = `Generate a dramatic, medieval-style summon message for ${targetUser.username}. Make it theatrical, over-the-top, and mention them 3-4 times. Use "thee", "thou", "hath" etc. Keep it under 200 words.`;
+
+    const result = await model.generateContent(prompt);
+    const summonText = result.response.text();
+
+    await interaction.editReply(`${targetUser} ${summonText}`);
+
+  } catch (error) {
+    await interaction.editReply('❌ Failed to generate summon message.');
+  }
+}
+
+async function handleSlashPersona(interaction) {
+  const name = interaction.options.getString('name');
+  const action = interaction.options.getString('action');
+  const channelId = interaction.channelId;
+
+  // Handle list action
+  if (action === 'list') {
+    const listEmbed = createPersonaListEmbed();
+    return interaction.reply({ embeds: [listEmbed], ephemeral: true });
+  }
+
+  // Handle reset action
+  if (action === 'reset' || name === 'default') {
+    currentPersonalities.set(channelId, 'default');
+    clearChatSession(channelId);
+
+    return interaction.reply('🤖 Personality reset to **The Founder** (default)!\nConversation history cleared.');
+  }
+
+  // If no name provided, show current
+  if (!name) {
+    const current = currentPersonalities.get(channelId) || 'default';
+    const emoji = personalityEmojis[current] || '🤖';
+    const desc = descriptions[current] || 'The Founder';
+
+    return interaction.reply({
+      content: `Current personality: ${emoji} **${current}** - ${desc}`,
+      ephemeral: true
+    });
+  }
+
+  // Switch personality
+  if (availablePersonalities.includes(name)) {
+    currentPersonalities.set(channelId, name);
+    clearChatSession(channelId);
+
+    const emoji = personalityEmojis[name];
+    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    await interaction.reply(`${emoji} Personality switched to **${formattedName}**!\nConversation history reset.`);
+  } else {
+    await interaction.reply({
+      content: '❌ Invalid personality. Use `/persona` with action "list" to see available options.',
+      ephemeral: true
+    });
+  }
+}
+
+async function handleSlashHelp(interaction) {
+  const category = interaction.options.getString('category') || 'overview';
+
+  let embeds = [];
+
+  switch (category) {
+    case 'moderation':
+      embeds = [createModerationEmbed()];
+      break;
+    case 'persona':
+      embeds = [createPersonaEmbed()];
+      break;
+    case 'ai':
+      embeds = [createAIEmbed()];
+      break;
+    case 'game':
+      embeds = [createGameEmbed()];
+      break;
+    case 'all':
+      embeds = [
+        createOverviewEmbed(),
+        createModerationEmbed(),
+        createPersonaEmbed(),
+        createAIEmbed(),
+        createGameEmbed(),
+        createStatusEmbed()
+      ];
+      break;
+    case 'overview':
+    default:
+      embeds = [createOverviewEmbed()];
+      break;
+  }
+
+  await interaction.reply({ embeds: embeds });
+}
+
+async function handleSlashSurvival(interaction) {
+  const targetUser = interaction.options.getUser('user') || interaction.user;
+
+  const embed = generateSurvivalEmbed(targetUser);
+
+  await interaction.reply({ embeds: [embed] });
+}
+
+async function handleSlashTitan(interaction) {
+  const targetUser = interaction.options.getUser('user') || interaction.user;
+
+  const embed = generateTitanEmbed(targetUser);
+
+  await interaction.reply({ embeds: [embed] });
+}
+
+async function handleSlashStats(interaction) {
+  const targetUser = interaction.options.getUser('user') || interaction.user;
+
+  const embed = generateStatsEmbed(targetUser);
+
+  await interaction.reply({ embeds: [embed] });
 }
 
 
@@ -988,11 +1378,30 @@ function updateStatus() {
 }
 
 // 7. Bot Ready Event
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`✅ Using gemini-2.5-flash-lite model`);
 
   aotrHandler.initialize();
+
+  // === SLASH COMMAND REGISTRATION ===
+  try {
+    const guild = client.guilds.cache.get(GUILD_ID);
+
+    if (guild) {
+      console.log('📡 Registering slash commands...');
+
+      await guild.commands.set(slashCommands);
+
+      console.log(`✅ Successfully registered ${slashCommands.length} slash commands!`);
+      console.log('✅ Commands available instantly in The Paradis Legion');
+    } else {
+      console.warn('⚠️ Guild not found for slash command registration');
+    }
+  } catch (error) {
+    console.error('❌ Failed to register slash commands:', error);
+  }
+  // === END SLASH COMMAND REGISTRATION ===
 
   // Start status rotation
   updateStatus(); // Set initial status
@@ -1006,6 +1415,83 @@ client.once('ready', () => {
 
   console.log(`✅ Session cleanup scheduled (runs every ${CLEANUP_INTERVAL / 1000 / 60} minutes)`);
   console.log(`✅ Bot is ready! Monitoring channel: ${AI_CHANNEL_ID}`);
+});
+
+client.on('interactionCreate', async (interaction) => {
+  // Only handle slash commands
+  if (!interaction.isCommand()) return;
+
+  const { commandName, options, user, member, channel, guild } = interaction;
+
+  try {
+    // Check if command should be deferred (for slow operations)
+    const shouldDefer = ['summon'].includes(commandName);
+
+    if (shouldDefer) {
+      await interaction.deferReply();
+    }
+
+    // Route to appropriate handler
+    switch (commandName) {
+      case 'purge':
+        await handleSlashPurge(interaction);
+        break;
+
+      case 'warn':
+        await handleSlashWarn(interaction);
+        break;
+
+      case 'say':
+        await handleSlashSay(interaction);
+        break;
+
+      case 'summon':
+        await handleSlashSummon(interaction);
+        break;
+
+      case 'persona':
+        await handleSlashPersona(interaction);
+        break;
+
+      case 'help':
+        await handleSlashHelp(interaction);
+        break;
+
+      case 'survival':
+        await handleSlashSurvival(interaction);
+        break;
+
+      case 'titan':
+        await handleSlashTitan(interaction);
+        break;
+
+      case 'stats':
+        await handleSlashStats(interaction);
+        break;
+
+      default:
+        await interaction.reply({
+          content: '❌ Unknown command',
+          ephemeral: true
+        });
+    }
+
+    console.log(`[${new Date().toISOString()}] Slash command used: /${commandName} by ${user.tag}`);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error handling slash command:`, error);
+
+    const errorMessage = {
+      content: '❌ An error occurred while executing this command.',
+      ephemeral: true
+    };
+
+    if (interaction.deferred) {
+      await interaction.editReply(errorMessage);
+    } else if (!interaction.replied) {
+      await interaction.reply(errorMessage);
+    }
+  }
 });
 
 // 8. Bot Login

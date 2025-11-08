@@ -25,6 +25,7 @@ let currentStatusIndex = 0;
 const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const aotrHandler = require('./aotr-handler.js');
 
 // --- Environment Variable Validation ---
 const requiredEnv = ['DISCORD_TOKEN', 'GEMINI_API_KEY', 'AI_CHANNEL_ID', 'STAFF_ROLE_ID', 'STAFF_LOG_CHANNEL'];
@@ -580,6 +581,12 @@ client.on('messageCreate', async (message) => {
     try {
         if (message.author.bot || !message.guild) return;
 
+        // --- AoTR Q&A Handler ---
+        if (message.channel.id === process.env.AOTR_INFO_CHANNEL_ID) {
+            aotrHandler.handleMessage(message);
+            return; // Stop further processing
+        }
+
         const isStaff = message.member.roles.cache.has(process.env.STAFF_ROLE_ID);
         const botMentioned = message.mentions.has(client.user);
 
@@ -726,6 +733,8 @@ function updateStatus() {
 client.once('ready', () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`✅ Using gemini-2.5-flash-lite model`);
+
+  aotrHandler.initialize();
 
   // Start status rotation
   updateStatus(); // Set initial status

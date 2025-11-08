@@ -361,12 +361,16 @@ async function handleHelpCommand(message, content) {
       case 'ai':
         embeds = [createAIEmbed()];
         break;
+      case 'game':
+        embeds = [createGameEmbed()];
+        break;
       case 'all':
         embeds = [
           createOverviewEmbed(),
           createModerationEmbed(),
           createPersonaEmbed(),
           createAIEmbed(),
+          createGameEmbed(),
           createStatusEmbed()
         ];
         break;
@@ -402,6 +406,11 @@ function createOverviewEmbed() {
         inline: false
       },
       {
+        name: '🎮 Game Commands',
+        value: '`survival` `titan` `stats`\n\nType: `@The Founder help game`',
+        inline: false
+      },
+      {
         name: '🎭 Personality System',
         value: 'Switch between 4 Attack on Titan characters\n\nType: `@The Founder help persona`',
         inline: false
@@ -423,7 +432,7 @@ function createOverviewEmbed() {
       }
     ],
     footer: {
-      text: 'The Founder Bot v2.0 | Attack on Titan Themed',
+      text: 'The Founder Bot v2.0 | Created by ShifoSan',
       icon_url: client.user.displayAvatarURL()
     },
     timestamp: new Date()
@@ -536,6 +545,43 @@ function createAIEmbed() {
 }
 
 /**
+ * Create Game Commands Embed
+ */
+function createGameEmbed() {
+  return {
+    title: '🎮 Game Commands',
+    description: 'Fun Attack on Titan themed commands for entertainment!',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '📊 survival [@user]',
+        value: 'Calculate survival odds in AoT world\n**Usage:** `@The Founder survival @user`\n**Permission:** Anyone\n**Example:** Shows combat, strategy, speed, defense, strength & luck stats',
+        inline: false
+      },
+      {
+        name: '🔥 titan [@user]',
+        value: 'Assign random Titan Shifter type\n**Usage:** `@The Founder titan @user`\n**Permission:** Anyone\n**Example:** Gives Colossal, Armored, Attack, or other Titan types',
+        inline: false
+      },
+      {
+        name: '📈 stats [@user]',
+        value: 'Show AoT RPG-style stats\n**Usage:** `@The Founder stats @user`\n**Permission:** Anyone\n**Example:** Displays 8 stats, class, specialty, and rank',
+        inline: false
+      },
+      {
+        name: '💡 Tip',
+        value: 'If you don\'t mention a user, the command targets you!',
+        inline: false
+      }
+    ],
+    footer: {
+      text: 'These commands are just for fun!'
+    },
+    timestamp: new Date()
+  };
+}
+
+/**
  * Create Server Status Embed
  */
 function createStatusEmbed() {
@@ -573,6 +619,202 @@ function createStatusEmbed() {
     footer: { text: 'Last updated: November 7, 2025' },
     timestamp: new Date()
   };
+}
+
+
+// --- Game Command Functions ---
+
+/**
+ * Handle survival command
+ */
+async function handleSurvivalCommand(message, args) {
+  try {
+    // Determine target user
+    const targetUser = message.mentions.users.first() || message.author;
+
+    // Generate random stats
+    const combat = Math.floor(Math.random() * 100) + 1;
+    const strategy = Math.floor(Math.random() * 100) + 1;
+    const speed = Math.floor(Math.random() * 100) + 1;
+    const defense = Math.floor(Math.random() * 100) + 1;
+    const strength = Math.floor(Math.random() * 100) + 1;
+    const luck = Math.floor(Math.random() * 100) + 1;
+
+    // Calculate overall
+    const overall = Math.floor((combat + strategy + speed + defense + strength + luck) / 6);
+
+    // Determine verdict
+    let verdict;
+    if (overall <= 30) {
+      verdict = "Unlikely to survive. Consider staying behind the walls.";
+    } else if (overall <= 50) {
+      verdict = "50/50 chance. Train harder, soldier!";
+    } else if (overall <= 70) {
+      verdict = "Decent odds. You'd make it with the right squad.";
+    } else if (overall <= 85) {
+      verdict = "High survival rate! You're Survey Corps material.";
+    } else {
+      verdict = "You're basically Levi. Humanity's hope!";
+    }
+
+    // Create embed
+    const embed = {
+      title: `📊 ${targetUser.username}'s Survival Chance Analysis`,
+      color: 0xFFA500,
+      fields: [
+        { name: '⚔️ Combat Skills', value: `${combat}/100`, inline: true },
+        { name: '🧠 Strategic Thinking', value: `${strategy}/100`, inline: true },
+        { name: '⚡ Speed & Reflexes', value: `${speed}/100`, inline: true },
+        { name: '🛡️ Defense', value: `${defense}/100`, inline: true },
+        { name: '💪 Physical Strength', value: `${strength}/100`, inline: true },
+        { name: '🎯 Luck Factor', value: `${luck}/100`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: false }, // Spacer
+        { name: '**Overall Survival Rate**', value: `**${overall}%**`, inline: false },
+        { name: 'Verdict', value: verdict, inline: false }
+      ],
+      footer: { text: 'Results are randomly generated for entertainment' },
+      timestamp: new Date()
+    };
+
+    await message.reply({ embeds: [embed] });
+    console.log(`[${new Date().toISOString()}] Survival command used for ${targetUser.username}`);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in survival command:`, error);
+    await message.reply('❌ Error calculating survival odds. Try again!').catch(() => {});
+  }
+}
+
+/**
+ * Handle titan command
+ */
+async function handleTitanCommand(message, args) {
+  try {
+    // Determine target user
+    const targetUser = message.mentions.users.first() || message.author;
+
+    // Titan types array
+    const titans = [
+      { name: 'Colossal Titan', emoji: '🔥', height: '60 meters', ability: 'Steam emission & explosive transformation', weakness: 'Extremely slow movement speed', power: 95 },
+      { name: 'Armored Titan', emoji: '🛡️', height: '15 meters', ability: 'Hardened armor plating', weakness: 'Reduced speed when armored', power: 88 },
+      { name: 'Attack Titan', emoji: '⚔️', height: '15 meters', ability: 'Can see future memories & pure combat prowess', weakness: 'No special defensive abilities', power: 85 },
+      { name: 'Female Titan', emoji: '💎', height: '14 meters', ability: 'Crystal hardening & calling Pure Titans', weakness: 'Limited stamina', power: 82 },
+      { name: 'Beast Titan', emoji: '🦍', height: '17 meters', ability: 'Throwing accuracy & commanding Titans', weakness: 'Vulnerable nape', power: 90 },
+      { name: 'Cart Titan', emoji: '🚂', height: '4 meters', ability: 'Endurance & equipment carrying', weakness: 'Low combat power', power: 65 },
+      { name: 'Jaw Titan', emoji: '⚡', height: '5 meters', ability: 'Extreme speed & powerful jaws', weakness: 'Small size, fragile', power: 78 },
+      { name: 'War Hammer Titan', emoji: '🔨', height: '15 meters', ability: 'Create weapons from hardening', weakness: 'Requires concentration', power: 92 },
+      { name: 'Founding Titan', emoji: '👑', height: 'Variable', ability: 'Control all Titans & alter Eldian bodies', weakness: 'Requires royal blood to use fully', power: 100 }
+    ];
+
+    // Random selection
+    const selectedTitan = titans[Math.floor(Math.random() * titans.length)];
+
+    // Create embed
+    const embed = {
+      title: `${selectedTitan.emoji} ${targetUser.username} has inherited the ${selectedTitan.name}!`,
+      color: 0xFF0000,
+      fields: [
+        { name: 'Height', value: selectedTitan.height, inline: true },
+        { name: 'Power Level', value: `${selectedTitan.power}/100`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true }, // Spacer
+        { name: 'Ability', value: selectedTitan.ability, inline: false },
+        { name: 'Weakness', value: selectedTitan.weakness, inline: false }
+      ],
+      footer: { text: '"With great power comes great responsibility. Use it wisely, soldier."' },
+      timestamp: new Date()
+    };
+
+    await message.reply({ embeds: [embed] });
+    console.log(`[${new Date().toISOString()}] Titan command used: ${selectedTitan.name} for ${targetUser.username}`);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in titan command:`, error);
+    await message.reply('❌ Error assigning Titan. Try again!').catch(() => {});
+  }
+}
+
+/**
+ * Handle stats command
+ */
+async function handleStatsCommand(message, args) {
+  try {
+    // Determine target user
+    const targetUser = message.mentions.users.first() || message.author;
+
+    // Generate random stats
+    const combat = Math.floor(Math.random() * 100) + 1;
+    const strategy = Math.floor(Math.random() * 100) + 1;
+    const speed = Math.floor(Math.random() * 100) + 1;
+    const defense = Math.floor(Math.random() * 100) + 1;
+    const strength = Math.floor(Math.random() * 100) + 1;
+    const accuracy = Math.floor(Math.random() * 100) + 1;
+    const stamina = Math.floor(Math.random() * 100) + 1;
+    const leadership = Math.floor(Math.random() * 100) + 1;
+
+    // Calculate total
+    const total = combat + strategy + speed + defense + strength + accuracy + stamina + leadership;
+
+    // Determine class based on highest stat
+    const stats = { combat, strategy, speed, defense, strength, accuracy, stamina, leadership };
+    const maxStat = Math.max(...Object.values(stats));
+    let characterClass, specialty;
+
+    if (maxStat === combat || maxStat === strength) {
+      characterClass = 'Warrior';
+      specialty = 'Close-quarters combat & raw power';
+    } else if (maxStat === strategy || maxStat === leadership) {
+      characterClass = 'Commander';
+      specialty = 'Tactical planning & leadership';
+    } else if (maxStat === speed || maxStat === accuracy) {
+      characterClass = 'Elite Scout';
+      specialty = 'High-speed combat & precision strikes';
+    } else if (maxStat === defense || maxStat === stamina) {
+      characterClass = 'Guardian';
+      specialty = 'Defense & endurance';
+    } else {
+      characterClass = 'All-Rounder';
+      specialty = 'Balanced abilities across all fields';
+    }
+
+    // Determine rank based on total
+    let rank;
+    if (total <= 300) { rank = 'Trainee'; }
+    else if (total <= 450) { rank = 'Soldier'; }
+    else if (total <= 550) { rank = 'Veteran Soldier'; }
+    else if (total <= 650) { rank = 'Elite Soldier'; }
+    else if (total <= 750) { rank = 'Squad Leader'; }
+    else { rank = 'Commander'; }
+
+    // Create embed
+    const embed = {
+      title: `📊 ${targetUser.username}'s Attack on Titan Stats`,
+      color: 0x0099FF,
+      fields: [
+        { name: '⚔️ Combat Power', value: `${combat}/100`, inline: true },
+        { name: '🧠 Strategic Mind', value: `${strategy}/100`, inline: true },
+        { name: '⚡ Speed & Agility', value: `${speed}/100`, inline: true },
+        { name: '🛡️ Defense', value: `${defense}/100`, inline: true },
+        { name: '💪 Raw Strength', value: `${strength}/100`, inline: true },
+        { name: '🎯 Accuracy', value: `${accuracy}/100`, inline: true },
+        { name: '🔋 Stamina', value: `${stamina}/100`, inline: true },
+        { name: '💡 Leadership', value: `${leadership}/100`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: false }, // Spacer
+        { name: '**Total Power**', value: `**${total}/800**`, inline: false },
+        { name: 'Class', value: characterClass, inline: true },
+        { name: 'Rank', value: rank, inline: true },
+        { name: 'Specialty', value: specialty, inline: false }
+      ],
+      footer: { text: '"Your stats show promise. Keep training, soldier!"' },
+      timestamp: new Date()
+    };
+
+    await message.reply({ embeds: [embed] });
+    console.log(`[${new Date().toISOString()}] Stats command used for ${targetUser.username}`);
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in stats command:`, error);
+    await message.reply('❌ Error generating stats. Try again!').catch(() => {});
+  }
 }
 
 
@@ -686,6 +928,22 @@ client.on('messageCreate', async (message) => {
             if (command === 'help') {
                 await handleHelpCommand(message, commandContent);
                 return;
+            }
+
+            // --- Game Commands ---
+            if (command === 'survival') {
+              await handleSurvivalCommand(message, args);
+              return;
+            }
+
+            if (command === 'titan') {
+              await handleTitanCommand(message, args);
+              return;
+            }
+
+            if (command === 'stats') {
+              await handleStatsCommand(message, args);
+              return;
             }
         }
 

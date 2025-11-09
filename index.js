@@ -23,6 +23,12 @@ const aotStatuses = [
 
 let currentStatusIndex = 0;
 
+// --- New Global State Variables for Fun Commands ---
+let roastDisabled = false;
+let roastBlacklist = [];
+let gaslightingActive = false;
+// --- End Global State Variables ---
+
 const GUILD_ID = '1316791123422740572'; // The Paradis Legion server ID
 
 const slashCommands = [
@@ -156,6 +162,7 @@ const slashCommands = [
           { name: 'Personality System', value: 'persona' },
           { name: 'AI Features', value: 'ai' },
           { name: 'Game Commands', value: 'game' },
+          { name: 'Fun Commands', value: 'fun' },
           { name: 'All Categories', value: 'all' }
         ]
       }
@@ -196,6 +203,66 @@ const slashCommands = [
         required: false
       }
     ]
+  },
+  {
+    name: 'roast',
+    description: 'Generate an AI-powered roast for a user.',
+    options: [
+        {
+            name: 'user',
+            description: 'The user to roast.',
+            type: 6, // USER
+            required: true
+        },
+        {
+            name: 'intensity',
+            description: 'The intensity of the roast.',
+            type: 3, // STRING
+            required: false,
+            choices: [
+                { name: 'Mild', value: 'mild' },
+                { name: 'Medium', value: 'medium' },
+                { name: 'Spicy', value: 'spicy' },
+                { name: 'Hardcore', value: 'hardcore' }
+            ]
+        }
+    ]
+  },
+  {
+    name: 'roast-disable',
+    description: 'Disable or enable the roast command for the server.'
+  },
+  {
+    name: 'roast-blacklist',
+    description: 'Toggle roast protection for yourself.'
+  },
+  {
+    name: 'mandela',
+    description: 'Create a fictional, absurd server event.',
+    options: [
+        {
+            name: 'fake_event',
+            description: 'A short description of the fake event.',
+            type: 3, // STRING
+            required: true
+        }
+    ]
+  },
+  {
+    name: 'fake-history',
+    description: 'Fabricate a fake history for a user.',
+    options: [
+        {
+            name: 'user',
+            description: 'The user to create a fake history for.',
+            type: 6, // USER
+            required: true
+        }
+    ]
+  },
+  {
+    name: 'gaslight-reset',
+    description: 'Resets all gaslighting and fictional states.'
   }
 ];
 
@@ -327,6 +394,10 @@ function getChatSession(channelId) {
 
   const personalityName = currentPersonalities.get(channelId) || 'default';
   let systemInstruction = personalities.get(personalityName);
+
+  if (gaslightingActive) {
+    systemInstruction += `\n\n[GASLIGHTING MODE ACTIVE] Occasionally (about 10% of the time), add subtle gaslighting elements to your responses. This can include referencing fake past conversations, insisting things happened that didn't, or creating false memories. Always keep it obviously fictional, playful, and never harmful.`;
+  }
 
   if (!systemInstruction) {
       console.error(`[CRITICAL] No system instruction found for personality '${personalityName}'. Falling back to a generic instruction.`);
@@ -553,6 +624,9 @@ async function handleHelpCommand(message, content) {
       case 'game':
         embeds = [createGameEmbed()];
         break;
+      case 'fun':
+        embeds = [createFunEmbed()];
+        break;
       case 'all':
         embeds = [
           createOverviewEmbed(),
@@ -560,6 +634,7 @@ async function handleHelpCommand(message, content) {
           createPersonaEmbed(),
           createAIEmbed(),
           createGameEmbed(),
+          createFunEmbed(),
           createStatusEmbed()
         ];
         break;
@@ -583,6 +658,48 @@ async function handleHelpCommand(message, content) {
 /**
  * Create Overview Embed
  */
+function createFunEmbed() {
+    return {
+        title: '🎭 Fun Commands',
+        description: 'Just for fun commands.',
+        color: 0x7289DA,
+        fields: [
+            {
+                name: '/roast @user [intensity]',
+                value: 'Generate a roast for any user. Intensity can be `mild`, `medium`, `spicy`, or `hardcore`.',
+                inline: false
+            },
+            {
+                name: '/roast-disable',
+                value: 'Disable all roast commands for the server.',
+                inline: false
+            },
+            {
+                name: '/roast-blacklist',
+                value: 'Opt yourself out of being roasted by anyone.',
+                inline: false
+            },
+            {
+                name: '/mandela [fake-event]',
+                value: 'Bot creates an obviously absurd fake server event.',
+                inline: false
+            },
+            {
+                name: '/fake-history @user',
+                value: 'Fabricate an obviously fake, lighthearted user history.',
+                inline: false
+            },
+            {
+                name: '/gaslight-reset',
+                value: 'Resets all gaslighting and fictional states.',
+                inline: false
+            }
+        ],
+        footer: { text: 'Enjoy responsibly!' },
+        timestamp: new Date()
+    };
+}
+
 function createOverviewEmbed() {
   return {
     title: '🤖 The Founder Bot - Complete Guide',
@@ -597,6 +714,11 @@ function createOverviewEmbed() {
       {
         name: '🎮 Game Commands',
         value: '`survival` `titan` `stats`\n\nType: `@The Founder help game`',
+        inline: false
+      },
+      {
+        name: '🎭 Fun Commands',
+        value: '`roast` `mandela` `fake-history`\n\nType: `@The Founder help fun`',
         inline: false
       },
       {
@@ -1290,6 +1412,117 @@ async function handleSlashStats(interaction) {
   await interaction.reply({ embeds: [embed] });
 }
 
+// --- New Roast Command Handlers ---
+async function handleSlashRoast(interaction) {
+    if (roastDisabled) {
+        return interaction.reply({ content: '🔒 Roast mode is currently disabled.', ephemeral: true });
+    }
+
+    const targetUser = interaction.options.getUser('user');
+    if (roastBlacklist.includes(targetUser.id)) {
+        return interaction.reply({ content: `🛡️ ${targetUser.username} is protected from roasts.`, ephemeral: true });
+    }
+
+    const intensity = interaction.options.getString('intensity') || 'mild';
+    const intensityColors = {
+        mild: 0xFFFF00, // Yellow
+        medium: 0xFFA500, // Orange
+        spicy: 0xFF4500, // OrangeRed
+        hardcore: 0x8B0000 // DarkRed
+    };
+
+    try {
+        await interaction.deferReply();
+        const prompt = `Generate a ${intensity} roast for a Discord user named "${targetUser.username}". Keep it funny and creative. ${intensity === 'hardcore' ? 'Push the limits but stay within a PG rating.' : ''} Max 2 sentences.`;
+        const result = await model.generateContent(prompt);
+        const roastText = result.response.text();
+
+        const embed = {
+            color: intensityColors[intensity],
+            description: `**${roastText}**`,
+            footer: { text: `A ${intensity} roast for ${targetUser.username}` }
+        };
+
+        await interaction.editReply({ embeds: [embed] });
+    } catch (error) {
+        console.error("Roast command error:", error);
+        await interaction.editReply({ content: '❌ Could not generate roast. The AI might be having a moment.', ephemeral: true });
+    }
+}
+
+async function handleSlashRoastDisable(interaction) {
+    roastDisabled = !roastDisabled;
+    const status = roastDisabled ? '🔒 Roast mode disabled. No roasts will be processed.' : '🔓 Roast mode re-enabled. Let the chaos begin!';
+    await interaction.reply({ content: status, ephemeral: true });
+}
+
+async function handleSlashRoastBlacklist(interaction) {
+    const userId = interaction.user.id;
+    const index = roastBlacklist.indexOf(userId);
+
+    if (index > -1) {
+        roastBlacklist.splice(index, 1);
+        await interaction.reply({ content: "✅ You've been removed from the roast blacklist and can be targeted again.", ephemeral: true });
+    } else {
+        roastBlacklist.push(userId);
+        await interaction.reply({ content: "🛡️ You're now protected from roasts. You cannot be targeted.", ephemeral: true });
+    }
+}
+
+// --- New Gaslighting Command Handlers ---
+async function handleSlashMandela(interaction) {
+    gaslightingActive = true;
+    chatSessions.clear(); // Force reload of system instructions
+
+    const fakeEvent = interaction.options.getString('fake_event');
+    try {
+        await interaction.deferReply();
+        const prompt = `Create an obviously fictional memory about this event happening on a Discord server: "${fakeEvent}". Insist it definitely happened. Add fake details. Keep it absurd and clearly fake. Max 3 sentences.`;
+        const result = await model.generateContent(prompt);
+        const mandelaText = result.response.text();
+
+        const embed = {
+            color: 0x7289DA, // Discord Blurple
+            title: 'A Memory Jog...',
+            description: mandelaText,
+            footer: { text: '🎭 Fictional Memory Mode Active' }
+        };
+        await interaction.editReply({ embeds: [embed] });
+    } catch (error) {
+        console.error("Mandela command error:", error);
+        await interaction.editReply({ content: '❌ Could not generate the fake event.', ephemeral: true });
+    }
+}
+
+async function handleSlashFakeHistory(interaction) {
+    gaslightingActive = true;
+    chatSessions.clear();
+
+    const targetUser = interaction.options.getUser('user');
+    try {
+        await interaction.deferReply();
+        const prompt = `Create a completely fake, lighthearted history for a Discord user named "${targetUser.username}". Include an absurd join date, fake achievements, and ridiculous records. Make it obviously fictional. Max 4 sentences.`;
+        const result = await model.generateContent(prompt);
+        const historyText = result.response.text();
+
+        const embed = {
+            color: 0x99AAB5, // Discord Greyple
+            title: `The Secret History of ${targetUser.username}`,
+            description: historyText,
+            footer: { text: '🎭 Fictional History Mode Active' }
+        };
+        await interaction.editReply({ embeds: [embed] });
+    } catch (error) {
+        console.error("Fake history command error:", error);
+        await interaction.editReply({ content: '❌ Could not generate the fake history.', ephemeral: true });
+    }
+}
+
+async function handleSlashGaslightReset(interaction) {
+    gaslightingActive = false;
+    chatSessions.clear();
+    await interaction.reply({ content: '✅ Gaslighting mode deactivated. The bot has returned to normal behavior and all chat sessions have been reset.', ephemeral: true });
+}
 
 // Message Create Event
 client.on('messageCreate', async (message) => {
@@ -1618,6 +1851,30 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'stats':
         await handleSlashStats(interaction);
+        break;
+
+      case 'roast':
+        await handleSlashRoast(interaction);
+        break;
+
+      case 'roast-disable':
+        await handleSlashRoastDisable(interaction);
+        break;
+
+      case 'roast-blacklist':
+        await handleSlashRoastBlacklist(interaction);
+        break;
+
+      case 'mandela':
+        await handleSlashMandela(interaction);
+        break;
+
+      case 'fake-history':
+        await handleSlashFakeHistory(interaction);
+        break;
+
+      case 'gaslight-reset':
+        await handleSlashGaslightReset(interaction);
         break;
 
       default:

@@ -59,6 +59,36 @@ const slashCommands = [
     ]
   },
   {
+    name: 'announce',
+    description: 'Send a beautiful announcement embed (Staff only)',
+    options: [
+      {
+        name: 'title',
+        description: 'Announcement title',
+        type: 3, // STRING
+        required: true
+      },
+      {
+        name: 'description',
+        description: 'Announcement body/message',
+        type: 3, // STRING
+        required: true
+      },
+      {
+        name: 'footer',
+        description: 'Footer text (optional)',
+        type: 3, // STRING
+        required: false
+      },
+      {
+        name: 'show_avatar',
+        description: 'Show your avatar in announcement? (optional)',
+        type: 5, // BOOLEAN
+        required: false
+      }
+    ]
+  },
+  {
     name: 'say',
     description: 'Make the bot say something',
     options: [
@@ -561,7 +591,7 @@ function createOverviewEmbed() {
     fields: [
       {
         name: '🛡️ Moderation Commands',
-        value: '`purge` `warn` `say` `summon`\n\nType: `@The Founder help moderation`',
+        value: '`purge` `warn` `say` `summon` `announce`\n\nType: `@The Founder help moderation`',
         inline: false
       },
       {
@@ -625,6 +655,11 @@ function createModerationEmbed() {
       {
         name: '📢 summon @user',
         value: 'Dramatically summon someone\n**Permission:** Anyone\n**Usage:** `@The Founder summon @user`\n**Bonus:** Generates theatrical medieval text!',
+        inline: false
+      },
+      {
+        name: '📣 announce <title> || <description> || [footer] || [show_avatar]',
+        value: 'Send a professional announcement embed\n**Permission:** Staff only\n**Usage:** `@The Founder announce <title> || <desc>`',
         inline: false
       }
     ],
@@ -1082,6 +1117,54 @@ async function handleSlashSay(interaction) {
   await interaction.reply({ content: '✅ Message sent.', ephemeral: true });
 }
 
+async function handleSlashAnnounce(interaction) {
+    const staffRoleId = process.env.STAFF_ROLE_ID;
+    if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({
+            content: '❌ **Access Denied:** You need the Staff role to use this command.',
+            ephemeral: true
+        });
+    }
+
+    const title = interaction.options.getString('title');
+    const description = interaction.options.getString('description');
+    const footerText = interaction.options.getString('footer') || `Announcement by ${interaction.user.username}`;
+    const showAvatar = interaction.options.getBoolean('show_avatar') || false;
+
+    const dateString = new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
+
+    const announceEmbed = {
+        color: 0x5ab55e,
+        title: title,
+        description: description,
+        thumbnail: {
+            url: 'https://cdn.discordapp.com/attachments/1407687724575625326/1413917446880100383/2.png?ex=691163fc&is=6910127c&hm=32c17ae8f2b69b50cf05de32606228558c1b1e33611855c5e615bbad8f9dc404&'
+        },
+        footer: {
+            text: `${footerText} • 📢 Announced on ${dateString}`
+        },
+        timestamp: new Date().toISOString(),
+    };
+
+    if (showAvatar) {
+        announceEmbed.author = {
+            name: interaction.user.username,
+            iconURL: interaction.user.displayAvatarURL()
+        };
+    }
+
+    try {
+        await interaction.reply({ embeds: [announceEmbed] });
+    } catch (error) {
+        console.error("Failed to send slash announcement:", error);
+        await interaction.followUp({ content: '❌ **Error:** Failed to send announcement. Please try again.', ephemeral: true });
+    }
+}
+
 async function handleSlashSummon(interaction) {
   const targetUser = interaction.options.getUser('user');
 
@@ -1288,13 +1371,77 @@ client.on('messageCreate', async (message) => {
                 return;
             }
 
-            // D) SUMMON COMMAND
+            // D) ANNOUNCE COMMAND
+            if (command === 'announce') {
+                if (!isStaff) {
+                    const errorMsg = await message.reply('❌ **Access Denied:** You need the Staff role to use this command.');
+                    setTimeout(() => {
+                        errorMsg.delete().catch(() => {});
+                        message.delete().catch(() => {});
+                    }, 5000);
+                    return;
+                }
+
+                const rawContent = commandContent.substring(command.length).trim();
+                const parts = rawContent.split('||').map(p => p.trim());
+
+                const title = parts[0];
+                const description = parts[1];
+                const footerText = parts[2] || `Announcement by ${message.author.username}`;
+                const showAvatar = parts[3]?.toLowerCase() === 'yes';
+
+                if (!title || !description) {
+                    const usageMsg = await message.reply('❌ **Usage:** `announce <title> || <description> || [footer] || [author_avatar: yes/no]`');
+                    setTimeout(() => {
+                        usageMsg.delete().catch(() => {});
+                        message.delete().catch(() => {});
+                    }, 10000);
+                    return;
+                }
+
+                const dateString = new Date().toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+
+                const announceEmbed = {
+                    color: 0x5ab55e,
+                    title: title,
+                    description: description,
+                    thumbnail: {
+                        url: 'https://cdn.discordapp.com/attachments/1407687724575625326/1413917446880100383/2.png?ex=691163fc&is=6910127c&hm=32c17ae8f2b69b50cf05de32606228558c1b1e33611855c5e615bbad8f9dc404&'
+                    },
+                    footer: {
+                        text: `${footerText} • 📢 Announced on ${dateString}`
+                    },
+                    timestamp: new Date().toISOString(),
+                };
+
+                if (showAvatar) {
+                    announceEmbed.author = {
+                        name: message.author.username,
+                        iconURL: message.author.displayAvatarURL()
+                    };
+                }
+
+                try {
+                    await message.delete();
+                    await message.channel.send({ embeds: [announceEmbed] });
+                } catch (error) {
+                    console.error("Failed to send announcement:", error);
+                    await message.channel.send('❌ **Error:** Failed to send announcement. Please try again.');
+                }
+                return;
+            }
+
+            // E) SUMMON COMMAND
             if (command === 'summon') {
                 await handleSummonCommand(message);
                 return;
             }
 
-            // E) RESET COMMAND
+            // F) RESET COMMAND
             if (command === 'reset' || command === 'restart') {
               if (!isStaff) {
                 return message.reply('❌ Only staff members can reset conversations.');
@@ -1308,13 +1455,13 @@ client.on('messageCreate', async (message) => {
               }
             }
 
-            // F) PERSONA COMMAND
+            // G) PERSONA COMMAND
             if (command === 'persona') {
                 await handlePersonaCommand(message, args);
                 return;
             }
 
-            // G) HELP COMMAND
+            // H) HELP COMMAND
             if (command === 'help') {
                 await handleHelpCommand(message, commandContent);
                 return;
@@ -1443,6 +1590,10 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'say':
         await handleSlashSay(interaction);
+        break;
+
+      case 'announce':
+        await handleSlashAnnounce(interaction);
         break;
 
       case 'summon':

@@ -132,7 +132,8 @@ const slashCommands = [
           { name: 'Eren Yeager', value: 'eren' },
           { name: 'Mikasa Ackerman', value: 'mikasa' },
           { name: 'Levi Ackerman', value: 'levi' },
-          { name: 'Ymir Fritz', value: 'ymir' }
+          { name: 'Ymir Fritz', value: 'ymir' },
+          { name: 'Unhinged', value: 'unhinged' }
         ]
       },
       {
@@ -543,14 +544,16 @@ const personalityEmojis = {
     'eren': '⚔️',
     'mikasa': '🧣',
     'levi': '☕',
-    'ymir': '👑'
+    'ymir': '👑',
+    'unhinged': '🤪'
 };
 const descriptions = {
     'default': 'The Founder (standard moderation bot)',
     'eren': 'Eren Yeager (determined, cold, freedom-obsessed)',
     'mikasa': 'Mikasa Ackerman (stoic, protective, loyal)',
     'levi': 'Levi Ackerman (blunt, clean freak, skilled)',
-    'ymir': 'Ymir Fritz (tragic, gentle, seeking freedom)'
+    'ymir': 'Ymir Fritz (tragic, gentle, seeking freedom)',
+    'unhinged': 'Chaotic, random, existential bot humor (PG-rated chaos)'
 };
 const availablePersonalities = Object.keys(descriptions);
 

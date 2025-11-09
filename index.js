@@ -5,6 +5,22 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
+// AoT Facts for rotating status
+const aotStatuses = [
+  "⚔️ Armin's bullies crushed by debris seconds after Colossal Titan breached Wall Maria",
+  "🍷 Isayama created Titans after drunk grabbed him at internet cafe, inspired by fear",
+  "🌀 Number 13 cursed: Titan lifespan, Wall Maria yr 845÷13, 104th Corps÷13, Erwin 13th",
+  "👁️ Attack Titan has mysterious 3rd eyelid that appears only once in the entire series",
+  "🧠 Reiner transferred consciousness from human body to Titan nervous system to survive",
+  "🥔 Sasha was supposed to die Volume 9, Clash of Titans but Isayama changed his mind",
+  "🗺️ AoT world geography inverted: Paradis = Madagascar, Marley = Africa upside down",
+  "💀 Armin's first kill was human soldier, not Titan—ironic for 'Attack on Titan'",
+  "👓 Hanji's eyesight so bad she can't tell Jean apart from Reiner without glasses",
+  "💁 Isayama designed Historia's appearance & personality before deciding her story",
+  "📉 Ymir sabotaged training so Historia would rank in top 10 graduates instead",
+  "🦗 Early manga Scouts leaped 10m like grasshoppers, no ODM gear used back then"
+];
+
 let currentStatusIndex = 0;
 
 // --- New Global State Variables for Fun Commands ---
@@ -12,37 +28,6 @@ let roastDisabled = false;
 let roastBlacklist = [];
 let gaslightingActive = false;
 // --- End Global State Variables ---
-
-// --- Config Management ---
-function loadConfig() {
-  try {
-    const data = fs.readFileSync('./config.json', 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading config:', error);
-    return null;
-  }
-}
-
-function saveConfig(config) {
-  try {
-    fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-    return true;
-  } catch (error) {
-    console.error('Error saving config:', error);
-    return false;
-  }
-}
-
-let botConfig = loadConfig();
-
-fs.watch('./config.json', (eventType) => {
-  if (eventType === 'change') {
-    console.log('Config file changed, reloading...');
-    botConfig = loadConfig();
-  }
-});
-// --- End Config Management ---
 
 const GUILD_ID = '1316791123422740572'; // The Paradis Legion server ID
 
@@ -54,7 +39,7 @@ const slashCommands = [
       {
         name: 'amount',
         description: 'Number of messages to delete (1-100)',
-        type: ApplicationCommandOptionType.Integer,
+        type: 4, // INTEGER
         required: true,
         min_value: 1,
         max_value: 100
@@ -68,13 +53,13 @@ const slashCommands = [
       {
         name: 'user',
         description: 'User to warn',
-        type: ApplicationCommandOptionType.User,
+        type: 6, // USER
         required: true
       },
       {
         name: 'reason',
         description: 'Reason for warning',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: true
       }
     ]
@@ -86,25 +71,25 @@ const slashCommands = [
       {
         name: 'title',
         description: 'Announcement title',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: true
       },
       {
         name: 'description',
         description: 'Announcement body/message',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: true
       },
       {
         name: 'footer',
         description: 'Footer text (optional)',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: false
       },
       {
         name: 'show_avatar',
         description: 'Show your avatar in announcement? (optional)',
-        type: ApplicationCommandOptionType.Boolean,
+        type: 5, // BOOLEAN
         required: false
       }
     ]
@@ -116,7 +101,7 @@ const slashCommands = [
       {
         name: 'message',
         description: 'Message to echo',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: true
       }
     ]
@@ -128,7 +113,7 @@ const slashCommands = [
       {
         name: 'user',
         description: 'User to summon',
-        type: ApplicationCommandOptionType.User,
+        type: 6, // USER
         required: true
       }
     ]
@@ -140,7 +125,7 @@ const slashCommands = [
       {
         name: 'name',
         description: 'Personality name (eren, mikasa, levi, ymir, default) or leave empty to view',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: false,
         choices: [
           { name: 'Default (The Founder)', value: 'default' },
@@ -154,7 +139,7 @@ const slashCommands = [
       {
         name: 'action',
         description: 'Special actions',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: false,
         choices: [
           { name: 'List all personalities', value: 'list' },
@@ -170,7 +155,7 @@ const slashCommands = [
       {
         name: 'category',
         description: 'Help category to view',
-        type: ApplicationCommandOptionType.String,
+        type: 3, // STRING
         required: false,
         choices: [
           { name: 'Overview', value: 'overview' },
@@ -191,7 +176,7 @@ const slashCommands = [
       {
         name: 'user',
         description: 'Target user (leave empty for yourself)',
-        type: ApplicationCommandOptionType.User,
+        type: 6, // USER
         required: false
       }
     ]
@@ -203,7 +188,7 @@ const slashCommands = [
       {
         name: 'user',
         description: 'Target user (leave empty for yourself)',
-        type: ApplicationCommandOptionType.User,
+        type: 6, // USER
         required: false
       }
     ]
@@ -215,7 +200,7 @@ const slashCommands = [
       {
         name: 'user',
         description: 'Target user (leave empty for yourself)',
-        type: ApplicationCommandOptionType.User,
+        type: 6, // USER
         required: false
       }
     ]
@@ -227,13 +212,13 @@ const slashCommands = [
         {
             name: 'user',
             description: 'The user to roast.',
-            type: ApplicationCommandOptionType.User,
+            type: 6, // USER
             required: true
         },
         {
             name: 'intensity',
             description: 'The intensity of the roast.',
-            type: ApplicationCommandOptionType.String,
+            type: 3, // STRING
             required: false,
             choices: [
                 { name: 'Mild', value: 'mild' },
@@ -259,7 +244,7 @@ const slashCommands = [
         {
             name: 'fake_event',
             description: 'A short description of the fake event.',
-            type: ApplicationCommandOptionType.String,
+            type: 3, // STRING
             required: true
         }
     ]
@@ -271,7 +256,7 @@ const slashCommands = [
         {
             name: 'user',
             description: 'The user to create a fake history for.',
-            type: ApplicationCommandOptionType.User,
+            type: 6, // USER
             required: true
         }
     ]
@@ -283,7 +268,7 @@ const slashCommands = [
 ];
 
 const express = require('express');
-const { Client, GatewayIntentBits, ApplicationCommandOptionType } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const aotrHandler = require('./aotr-handler.js');
 
@@ -324,70 +309,6 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
-});
-
-// Dashboard API endpoints
-app.use(express.json()); // Parse JSON bodies
-
-// Get bot status
-app.get('/api/status', (req, res) => {
-  res.json({
-    online: client.isReady(),
-    enabled: botConfig?.botEnabled || true,
-    uptime: process.uptime()
-  });
-});
-
-// Toggle bot on/off
-app.post('/api/toggle', (req, res) => {
-  const { enabled } = req.body;
-
-  if (!botConfig) {
-    return res.status(500).json({ error: 'Config not loaded' });
-  }
-
-  botConfig.botEnabled = enabled;
-
-  if (saveConfig(botConfig)) {
-    res.json({ success: true, enabled: botConfig.botEnabled });
-  } else {
-    res.status(500).json({ error: 'Failed to save config' });
-  }
-});
-
-// Get current config
-app.get('/api/config', (req, res) => {
-  if (!botConfig) {
-    return res.status(500).json({ error: 'Config not loaded' });
-  }
-  res.json(botConfig);
-});
-
-// Update config
-app.post('/api/update-config', (req, res) => {
-  const { aiChannelId, statusMessages } = req.body;
-
-  if (!botConfig) {
-    return res.status(500).json({ error: 'Config not loaded' });
-  }
-
-  if (aiChannelId) botConfig.aiChannelId = aiChannelId;
-  if (statusMessages) botConfig.statusMessages = statusMessages;
-
-  if (saveConfig(botConfig)) {
-    res.json({ success: true, config: botConfig });
-  } else {
-    res.status(500).json({ error: 'Failed to save config' });
-  }
-});
-
-// Restart bot
-app.post('/api/restart', (req, res) => {
-  res.json({ success: true, message: 'Bot restarting...' });
-
-  setTimeout(() => {
-    process.exit(0); // Render will auto-restart
-  }, 1000);
 });
 
 // Start HTTP server
@@ -454,6 +375,7 @@ const COOLDOWN_TIME = 3000; // 3 seconds
 const chatSessions = new Map(); // channelId -> { session, lastActivity }
 
 // Configuration
+const AI_CHANNEL_ID = process.env.AI_CHANNEL_ID || '1434115853422432379';
 const SESSION_TIMEOUT = 48 * 60 * 60 * 1000; // 48 hours
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
@@ -927,7 +849,7 @@ function createAIEmbed() {
       },
       {
         name: '📍 Auto-Reply Channel',
-        value: `Channel: <#${botConfig?.aiChannelId || process.env.AI_CHANNEL_ID}>\nBot auto-responds to all messages\nNo mention needed - just chat naturally!\nBuilt-in 3-second cooldown for non-staff`,
+        value: `Channel: <#${process.env.AI_CHANNEL_ID}>\nBot auto-responds to all messages\nNo mention needed - just chat naturally!\nBuilt-in 3-second cooldown for non-staff`,
         inline: false
       },
       {
@@ -1608,7 +1530,7 @@ async function handleSlashGaslightReset(interaction) {
 // Message Create Event
 client.on('messageCreate', async (message) => {
     try {
-        if (message.author.bot || !message.guild || !botConfig.botEnabled) return;
+        if (message.author.bot || !message.guild) return;
 
         // --- AoTR Q&A Handler ---
         if (message.channel.id === process.env.AOTR_INFO_CHANNEL_ID) {
@@ -1799,7 +1721,7 @@ client.on('messageCreate', async (message) => {
         }
 
         // --- AI Auto-Reply ---
-        if (message.channel.id === (botConfig?.aiChannelId || process.env.AI_CHANNEL_ID)) {
+        if (message.channel.id === process.env.AI_CHANNEL_ID) {
             if (!isStaff) { // Apply cooldown only to non-staff
                 if (cooldowns.has(message.author.id)) {
                     const expirationTime = cooldowns.get(message.author.id) + COOLDOWN_TIME;
@@ -1822,10 +1744,7 @@ client.on('messageCreate', async (message) => {
  * Update bot status with rotating unhinged AoT facts
  */
 function updateStatus() {
-  const statuses = botConfig?.statusMessages || [];
-  if (statuses.length === 0) return;
-
-  const status = statuses[currentStatusIndex];
+  const status = aotStatuses[currentStatusIndex];
 
   client.user.setPresence({
     activities: [{
@@ -1838,7 +1757,7 @@ function updateStatus() {
   console.log(`[${new Date().toISOString()}] 📺 Status updated: ${status}`);
 
   // Move to next status (cycle back to start at end)
-  currentStatusIndex = (currentStatusIndex + 1) % statuses.length;
+  currentStatusIndex = (currentStatusIndex + 1) % aotStatuses.length;
 }
 
 // 7. Bot Ready Event
@@ -1878,7 +1797,7 @@ client.once('ready', async () => {
   }, CLEANUP_INTERVAL);
 
   console.log(`✅ Session cleanup scheduled (runs every ${CLEANUP_INTERVAL / 1000 / 60} minutes)`);
-  console.log(`✅ Bot is ready! Monitoring channel: ${botConfig?.aiChannelId || process.env.AI_CHANNEL_ID}`);
+  console.log(`✅ Bot is ready! Monitoring channel: ${AI_CHANNEL_ID}`);
 });
 
 client.on('interactionCreate', async (interaction) => {

@@ -17,7 +17,30 @@ let gaslightingActive = false;
 function loadConfig() {
   try {
     const data = fs.readFileSync('./config.json', 'utf8');
-    return JSON.parse(data);
+    const config = JSON.parse(data);
+
+    // Ensure all required fields exist with defaults
+    return {
+      botEnabled: config.botEnabled ?? true,
+      aiChannelId: config.aiChannelId || process.env.AI_CHANNEL_ID,
+      statusMessages: config.statusMessages || [],
+      cooldownTime: config.cooldownTime ?? 3,
+      cooldownUnit: config.cooldownUnit || 'seconds',
+      sessionTimeout: config.sessionTimeout ?? 48,
+      sessionTimeoutUnit: config.sessionTimeoutUnit || 'hours',
+      personalityDefaults: config.personalityDefaults || {},
+      disabledCommands: config.disabledCommands || [],
+      rateLimitSettings: config.rateLimitSettings || {
+        enabled: true,
+        maxRequests: 10,
+        timeWindow: 60
+      },
+      autoModeration: config.autoModeration || {
+        enabled: false,
+        deleteSpam: false,
+        warnOnCaps: false
+      }
+    };
   } catch (error) {
     console.error('Error reading config:', error);
     return null;
@@ -179,6 +202,7 @@ const slashCommands = [
           { name: 'AI Features', value: 'ai' },
           { name: 'Game Commands', value: 'game' },
           { name: 'Fun Commands', value: 'fun' },
+          { name: 'Bot Management', value: 'management' },
           { name: 'All Categories', value: 'all' }
         ]
       }
@@ -279,6 +303,223 @@ const slashCommands = [
   {
     name: 'gaslight-reset',
     description: 'Resets all gaslighting and fictional states.'
+  },
+  {
+    name: 'control',
+    description: 'Bot management & configuration (Staff only)',
+    options: [
+      {
+        name: 'toggle-bot',
+        description: 'Enable or disable the bot',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{
+          name: 'state',
+          description: 'Bot state (true = enabled, false = disabled)',
+          type: ApplicationCommandOptionType.Boolean,
+          required: true
+        }]
+      },
+      {
+        name: 'set-ai-channel',
+        description: 'Change AI auto-reply channel',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{
+          name: 'channel',
+          description: 'New AI channel',
+          type: ApplicationCommandOptionType.Channel,
+          required: true
+        }]
+      },
+      {
+        name: 'set-cooldown',
+        description: 'Set cooldown time for non-staff users',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'value',
+            description: 'Cooldown value',
+            type: ApplicationCommandOptionType.Integer,
+            required: true,
+            min_value: 1,
+            max_value: 60
+          },
+          {
+            name: 'unit',
+            description: 'Time unit',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: 'Seconds', value: 'seconds' },
+              { name: 'Minutes', value: 'minutes' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'set-session-timeout',
+        description: 'Set AI session timeout duration',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'value',
+            description: 'Timeout value',
+            type: ApplicationCommandOptionType.Integer,
+            required: true,
+            min_value: 1,
+            max_value: 168
+          },
+          {
+            name: 'unit',
+            description: 'Time unit',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: 'Hours', value: 'hours' },
+              { name: 'Days', value: 'days' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'set-personality-default',
+        description: 'Set default personality for a channel',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'channel',
+            description: 'Target channel',
+            type: ApplicationCommandOptionType.Channel,
+            required: true
+          },
+          {
+            name: 'personality',
+            description: 'Personality name',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: 'Default (The Founder)', value: 'default' },
+              { name: 'Eren Yeager', value: 'eren' },
+              { name: 'Mikasa Ackerman', value: 'mikasa' },
+              { name: 'Levi Ackerman', value: 'levi' },
+              { name: 'Ymir Fritz', value: 'ymir' },
+              { name: 'Unhinged', value: 'unhinged' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'disable-commands',
+        description: 'Hide command categories from Discord',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'category',
+            description: 'Command category',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: 'Game Commands', value: 'game' },
+              { name: 'Fun Commands', value: 'fun' },
+              { name: 'Persona System', value: 'persona' },
+              { name: 'All Categories', value: 'all' }
+            ]
+          },
+          {
+            name: 'enable',
+            description: 'True = enable category, False = disable category',
+            type: ApplicationCommandOptionType.Boolean,
+            required: true
+          }
+        ]
+      },
+      {
+        name: 'rate-limit',
+        description: 'Configure rate limiting',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'enabled',
+            description: 'Enable/disable rate limiting',
+            type: ApplicationCommandOptionType.Boolean,
+            required: true
+          },
+          {
+            name: 'max_requests',
+            description: 'Maximum requests allowed',
+            type: ApplicationCommandOptionType.Integer,
+            required: false,
+            min_value: 1,
+            max_value: 100
+          },
+          {
+            name: 'time_window',
+            description: 'Time window in seconds',
+            type: ApplicationCommandOptionType.Integer,
+            required: false,
+            min_value: 10,
+            max_value: 300
+          }
+        ]
+      },
+      {
+        name: 'auto-mod',
+        description: 'Toggle auto-moderation features',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'feature',
+            description: 'Feature to toggle',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+            choices: [
+              { name: 'Auto-Moderation System', value: 'enabled' },
+              { name: 'Delete Spam', value: 'deleteSpam' },
+              { name: 'Warn on Caps', value: 'warnOnCaps' }
+            ]
+          },
+          {
+            name: 'state',
+            description: 'Enable/disable feature',
+            type: ApplicationCommandOptionType.Boolean,
+            required: true
+          }
+        ]
+      },
+      {
+        name: 'view-config',
+        description: 'View current bot configuration',
+        type: ApplicationCommandOptionType.Subcommand
+      },
+      {
+        name: 'clear-sessions',
+        description: 'Clear all AI chat sessions',
+        type: ApplicationCommandOptionType.Subcommand
+      },
+      {
+        name: 'add-status',
+        description: 'Add new rotating status message',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{
+          name: 'message',
+          description: 'Status message text',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          max_length: 128
+        }]
+      },
+      {
+        name: 'remove-status',
+        description: 'Remove status message by index',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{
+          name: 'index',
+          description: 'Index to remove (see view-config)',
+          type: ApplicationCommandOptionType.Integer,
+          required: true,
+          min_value: 0
+        }]
+      }
+    ]
   }
 ];
 
@@ -448,13 +689,13 @@ loadPersonalities();
 
 // Cooldown management
 const cooldowns = new Map();
-const COOLDOWN_TIME = 3000; // 3 seconds
+global.COOLDOWN_TIME = 3000; // 3 seconds
 
 // Chat session storage with metadata
 const chatSessions = new Map(); // channelId -> { session, lastActivity }
 
 // Configuration
-const SESSION_TIMEOUT = 48 * 60 * 60 * 1000; // 48 hours
+global.SESSION_TIMEOUT = 48 * 60 * 60 * 1000; // 48 hours
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
 /**
@@ -521,7 +762,7 @@ function cleanupOldSessions() {
   for (const [channelId, sessionData] of chatSessions.entries()) {
     const sessionAge = now - sessionData.lastActivity;
 
-    if (sessionAge > SESSION_TIMEOUT) {
+    if (sessionAge > global.SESSION_TIMEOUT) {
       chatSessions.delete(channelId);
       removedCount++;
       console.log(`[${new Date().toISOString()}] Removed expired session for channel ${channelId} (age: ${Math.round(sessionAge / 1000 / 60 / 60)} hours)`);
@@ -781,6 +1022,78 @@ function createFunEmbed() {
     };
 }
 
+function createBotManagementEmbed() {
+  return {
+    title: '⚙️ Bot Management Commands',
+    description: 'Staff-only commands for bot configuration and control',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '/control toggle-bot',
+        value: 'Enable or disable the entire bot\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control set-ai-channel',
+        value: 'Change the AI auto-reply channel\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control set-cooldown',
+        value: 'Set cooldown time for non-staff users\n**Permission:** Staff only\n**Options:** Value (1-60) & Unit (seconds/minutes)',
+        inline: false
+      },
+      {
+        name: '/control set-session-timeout',
+        value: 'Set AI session timeout duration\n**Permission:** Staff only\n**Options:** Value (1-168) & Unit (hours/days)',
+        inline: false
+      },
+      {
+        name: '/control set-personality-default',
+        value: 'Set default personality for a channel\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control disable-commands',
+        value: 'Hide command categories from Discord\n**Permission:** Staff only\n**Categories:** game, fun, persona, all',
+        inline: false
+      },
+      {
+        name: '/control rate-limit',
+        value: 'Configure rate limiting settings\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control auto-mod',
+        value: 'Toggle auto-moderation features\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control view-config',
+        value: 'View current bot configuration\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control clear-sessions',
+        value: 'Clear all AI chat sessions\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control add-status',
+        value: 'Add new rotating status message\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control remove-status',
+        value: 'Remove status message by index\n**Permission:** Staff only',
+        inline: false
+      }
+    ],
+    footer: { text: 'All settings saved to config.json and apply immediately' },
+    timestamp: new Date()
+  };
+}
+
 function createOverviewEmbed() {
   return {
     title: '🤖 The Founder Bot - Complete Guide',
@@ -800,6 +1113,11 @@ function createOverviewEmbed() {
       {
         name: '🎭 Fun Commands',
         value: '`roast` `mandela` `fake-history`\n\nType: `@The Founder help fun`',
+        inline: false
+      },
+      {
+        name: '⚙️ Bot Management',
+        value: 'Staff-only configuration controls\n\nType: `@The Founder help management`',
         inline: false
       },
       {
@@ -1450,6 +1768,9 @@ async function handleSlashHelp(interaction) {
     case 'game':
       embeds = [createGameEmbed()];
       break;
+    case 'management':
+      embeds = [createBotManagementEmbed()];
+      break;
     case 'all':
       embeds = [
         createOverviewEmbed(),
@@ -1457,6 +1778,8 @@ async function handleSlashHelp(interaction) {
         createPersonaEmbed(),
         createAIEmbed(),
         createGameEmbed(),
+        createFunEmbed(),
+        createBotManagementEmbed(),
         createStatusEmbed()
       ];
       break;
@@ -1603,6 +1926,314 @@ async function handleSlashGaslightReset(interaction) {
     gaslightingActive = false;
     chatSessions.clear();
     await interaction.reply({ content: '✅ Gaslighting mode deactivated. The bot has returned to normal behavior and all chat sessions have been reset.', ephemeral: true });
+}
+
+async function handleSlashControl(interaction) {
+  const staffRoleId = process.env.STAFF_ROLE_ID;
+
+  // Staff permission check
+  if (!interaction.member.roles.cache.has(staffRoleId)) {
+    return interaction.reply({
+      content: '❌ **Access Denied:** This command requires Staff permissions.',
+      ephemeral: true
+    });
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+
+  try {
+    switch (subcommand) {
+      case 'toggle-bot': {
+        const state = interaction.options.getBoolean('state');
+        botConfig.botEnabled = state;
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Bot ${state ? '**enabled**' : '**disabled**'} successfully.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-ai-channel': {
+        const channel = interaction.options.getChannel('channel');
+        botConfig.aiChannelId = channel.id;
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ AI auto-reply channel set to ${channel}`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-cooldown': {
+        const value = interaction.options.getInteger('value');
+        const unit = interaction.options.getString('unit');
+
+        botConfig.cooldownTime = value;
+        botConfig.cooldownUnit = unit;
+        saveConfig(botConfig);
+
+        // Apply to global COOLDOWN_TIME constant
+        const multiplier = unit === 'minutes' ? 60000 : 1000;
+        global.COOLDOWN_TIME = value * multiplier;
+
+        await interaction.reply({
+          content: `✅ Cooldown set to **${value} ${unit}** (applies immediately)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-session-timeout': {
+        const value = interaction.options.getInteger('value');
+        const unit = interaction.options.getString('unit');
+
+        botConfig.sessionTimeout = value;
+        botConfig.sessionTimeoutUnit = unit;
+        saveConfig(botConfig);
+
+        // Apply to global SESSION_TIMEOUT constant
+        const multiplier = unit === 'days' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+        global.SESSION_TIMEOUT = value * multiplier;
+
+        await interaction.reply({
+          content: `✅ Session timeout set to **${value} ${unit}** (applies to new sessions)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-personality-default': {
+        const channel = interaction.options.getChannel('channel');
+        const personality = interaction.options.getString('personality');
+
+        botConfig.personalityDefaults[channel.id] = personality;
+        saveConfig(botConfig);
+
+        // Apply immediately
+        currentPersonalities.set(channel.id, personality);
+        clearChatSession(channel.id);
+
+        await interaction.reply({
+          content: `✅ Default personality for ${channel} set to **${personality}** (applied immediately)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'disable-commands': {
+        const category = interaction.options.getString('category');
+        const enable = interaction.options.getBoolean('enable');
+
+        if (enable) {
+          // Remove from disabled list
+          botConfig.disabledCommands = botConfig.disabledCommands.filter(c => c !== category);
+        } else {
+          // Add to disabled list
+          if (!botConfig.disabledCommands.includes(category)) {
+            botConfig.disabledCommands.push(category);
+          }
+        }
+
+        saveConfig(botConfig);
+
+        // Filter commands based on disabled categories
+        const categoryMap = {
+          'game': ['survival', 'titan', 'stats'],
+          'fun': ['roast', 'roast-disable', 'roast-blacklist', 'mandela', 'fake-history', 'gaslight-reset'],
+          'persona': ['persona']
+        };
+
+        let commandsToRegister = [...slashCommands];
+
+        // Apply filtering based on ALL disabled categories in config
+        if (botConfig.disabledCommands && botConfig.disabledCommands.length > 0) {
+          botConfig.disabledCommands.forEach(disabledCat => {
+            if (disabledCat === 'all') {
+              // Keep only essential commands
+              commandsToRegister = slashCommands.filter(cmd =>
+                ['purge', 'warn', 'announce', 'help', 'control'].includes(cmd.name)
+              );
+            } else {
+              // Filter by category
+              const disabledCmds = categoryMap[disabledCat] || [];
+              commandsToRegister = commandsToRegister.filter(cmd =>
+                !disabledCmds.includes(cmd.name)
+              );
+            }
+          });
+        }
+
+        const guild = interaction.guild;
+        await guild.commands.set(commandsToRegister);
+
+        await interaction.reply({
+          content: `✅ Command category **${category}** ${enable ? 'enabled' : 'disabled'}. Commands ${enable ? 'restored' : 'hidden'}.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'rate-limit': {
+        const enabled = interaction.options.getBoolean('enabled');
+        const maxRequests = interaction.options.getInteger('max_requests');
+        const timeWindow = interaction.options.getInteger('time_window');
+
+        botConfig.rateLimitSettings.enabled = enabled;
+        if (maxRequests !== null) botConfig.rateLimitSettings.maxRequests = maxRequests;
+        if (timeWindow !== null) botConfig.rateLimitSettings.timeWindow = timeWindow;
+
+        saveConfig(botConfig);
+
+        await interaction.reply({
+          content: `✅ Rate limiting ${enabled ? 'enabled' : 'disabled'}` +
+            (maxRequests ? `\n• Max requests: **${maxRequests}**` : '') +
+            (timeWindow ? `\n• Time window: **${timeWindow}s**` : ''),
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'auto-mod': {
+        const feature = interaction.options.getString('feature');
+        const state = interaction.options.getBoolean('state');
+
+        botConfig.autoModeration[feature] = state;
+        saveConfig(botConfig);
+
+        await interaction.reply({
+          content: `✅ Auto-moderation feature **${feature}** ${state ? 'enabled' : 'disabled'}`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'view-config': {
+        const embed = {
+          title: '⚙️ Bot Configuration Dashboard',
+          color: 0x00FF00,
+          fields: [
+            {
+              name: '🤖 Bot Status',
+              value: botConfig.botEnabled ? '✅ **Enabled**' : '❌ **Disabled**',
+              inline: true
+            },
+            {
+              name: '💬 AI Channel',
+              value: `<#${botConfig.aiChannelId}>`,
+              inline: true
+            },
+            {
+              name: '⏱️ Cooldown',
+              value: `${botConfig.cooldownTime} ${botConfig.cooldownUnit}`,
+              inline: true
+            },
+            {
+              name: '🕐 Session Timeout',
+              value: `${botConfig.sessionTimeout} ${botConfig.sessionTimeoutUnit}`,
+              inline: true
+            },
+            {
+              name: '📊 Active Sessions',
+              value: `${chatSessions.size} sessions`,
+              inline: true
+            },
+            {
+              name: '📺 Status Messages',
+              value: `${botConfig.statusMessages.length} loaded`,
+              inline: true
+            },
+            {
+              name: '🎭 Personality Defaults',
+              value: Object.keys(botConfig.personalityDefaults).length > 0
+                ? Object.entries(botConfig.personalityDefaults)
+                    .map(([chId, pers]) => `<#${chId}>: ${pers}`)
+                    .join('\n')
+                : 'None set',
+              inline: false
+            },
+            {
+              name: '🚫 Disabled Commands',
+              value: botConfig.disabledCommands.length > 0
+                ? botConfig.disabledCommands.join(', ')
+                : 'None',
+              inline: false
+            },
+            {
+              name: '⚡ Rate Limiting',
+              value: `${botConfig.rateLimitSettings.enabled ? '✅' : '❌'} Enabled` +
+                `\n• Max: ${botConfig.rateLimitSettings.maxRequests} requests` +
+                `\n• Window: ${botConfig.rateLimitSettings.timeWindow}s`,
+              inline: true
+            },
+            {
+              name: '🛡️ Auto-Moderation',
+              value: `${botConfig.autoModeration.enabled ? '✅' : '❌'} System` +
+                `\n${botConfig.autoModeration.deleteSpam ? '✅' : '❌'} Delete Spam` +
+                `\n${botConfig.autoModeration.warnOnCaps ? '✅' : '❌'} Warn on Caps`,
+              inline: true
+            }
+          ],
+          footer: { text: 'Use /control commands to modify these settings' },
+          timestamp: new Date()
+        };
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+
+      case 'clear-sessions': {
+        const count = chatSessions.size;
+        chatSessions.clear();
+        await interaction.reply({
+          content: `✅ Cleared **${count}** active AI chat sessions.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'add-status': {
+        const message = interaction.options.getString('message');
+        botConfig.statusMessages.push(message);
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Added status message: "${message}"\nTotal: ${botConfig.statusMessages.length} messages`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'remove-status': {
+        const index = interaction.options.getInteger('index');
+        if (index >= botConfig.statusMessages.length) {
+          return interaction.reply({
+            content: `❌ Invalid index. There are only ${botConfig.statusMessages.length} status messages.`,
+            ephemeral: true
+          });
+        }
+        const removed = botConfig.statusMessages.splice(index, 1);
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Removed status message: "${removed[0]}"\nRemaining: ${botConfig.statusMessages.length} messages`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      default:
+        await interaction.reply({
+          content: '❌ Unknown subcommand.',
+          ephemeral: true
+        });
+    }
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in control command:`, error);
+    await interaction.reply({
+      content: '❌ An error occurred while processing your request.',
+      ephemeral: true
+    });
+  }
 }
 
 // Message Create Event
@@ -1802,11 +2433,11 @@ client.on('messageCreate', async (message) => {
         if (message.channel.id === (botConfig?.aiChannelId || process.env.AI_CHANNEL_ID)) {
             if (!isStaff) { // Apply cooldown only to non-staff
                 if (cooldowns.has(message.author.id)) {
-                    const expirationTime = cooldowns.get(message.author.id) + COOLDOWN_TIME;
+                    const expirationTime = cooldowns.get(message.author.id) + global.COOLDOWN_TIME;
                     if (Date.now() < expirationTime) return; // Silently ignore
                 }
                 cooldowns.set(message.author.id, Date.now());
-                setTimeout(() => cooldowns.delete(message.author.id), COOLDOWN_TIME);
+                setTimeout(() => cooldowns.delete(message.author.id), global.COOLDOWN_TIME);
             }
             await handleAIResponse(message);
         }
@@ -1844,6 +2475,14 @@ function updateStatus() {
 // 7. Bot Ready Event
 client.once('ready', async () => {
   console.log(`✅ Bot logged in as ${client.user.tag}`);
+
+  // Load dynamic config values
+  const cooldownMultiplier = botConfig.cooldownUnit === 'minutes' ? 60000 : 1000;
+  global.COOLDOWN_TIME = botConfig.cooldownTime * cooldownMultiplier;
+
+  const sessionMultiplier = botConfig.sessionTimeoutUnit === 'days' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+  global.SESSION_TIMEOUT = botConfig.sessionTimeout * sessionMultiplier;
+
   console.log(`✅ Using gemini-2.5-flash-lite model`);
 
   aotrHandler.initialize();
@@ -1855,9 +2494,35 @@ client.once('ready', async () => {
     if (guild) {
       console.log('📡 Registering slash commands...');
 
-      await guild.commands.set(slashCommands);
+      // Filter commands based on disabled categories
+      const categoryMap = {
+        'game': ['survival', 'titan', 'stats'],
+        'fun': ['roast', 'roast-disable', 'roast-blacklist', 'mandela', 'fake-history', 'gaslight-reset'],
+        'persona': ['persona']
+      };
 
-      console.log(`✅ Successfully registered ${slashCommands.length} slash commands!`);
+      let commandsToRegister = [...slashCommands];
+
+      if (botConfig.disabledCommands && botConfig.disabledCommands.length > 0) {
+        botConfig.disabledCommands.forEach(category => {
+          if (category === 'all') {
+            // Keep only essential commands
+            commandsToRegister = slashCommands.filter(cmd =>
+              ['purge', 'warn', 'announce', 'help', 'control'].includes(cmd.name)
+            );
+          } else {
+            // Filter by category
+            const disabledCmds = categoryMap[category] || [];
+            commandsToRegister = commandsToRegister.filter(cmd =>
+              !disabledCmds.includes(cmd.name)
+            );
+          }
+        });
+      }
+
+      await guild.commands.set(commandsToRegister);
+
+      console.log(`✅ Successfully registered ${commandsToRegister.length} slash commands!`);
       console.log('✅ Commands available instantly in The Paradis Legion');
     } else {
       console.warn('⚠️ Guild not found for slash command registration');
@@ -1959,6 +2624,10 @@ client.on('interactionCreate', async (interaction) => {
 
       case 'gaslight-reset':
         await handleSlashGaslightReset(interaction);
+        break;
+
+      case 'control':
+        await handleSlashControl(interaction);
         break;
 
       default:

@@ -1,0 +1,930 @@
+# 🤖 Prompt for Google Jules: Add `/control` Admin Command System
+
+## 📋 Overview
+
+Add a new **staff-only** `/control` slash command to The Founder Discord bot that allows admins to manage bot configuration in real-time without restarts. This command should be automatically registered and fully integrated into the existing help system.
+
+---
+
+## ✅ Requirements Checklist
+
+### 1. **Slash Command Registration**
+- Add the `/control` command to the `slashCommands` array in `index.js` (around line 43)
+- The command will auto-register on bot startup (same pattern as existing commands)
+- **Permission:** Staff only (check `process.env.STAFF_ROLE_ID`)
+
+### 2. **Config File Update**
+- Extend the existing `config.json` to include these new fields:
+```json
+{
+  "botEnabled": true,
+  "aiChannelId": "existing_id",
+  "statusMessages": ["existing", "messages"],
+  "cooldownTime": 3,
+  "cooldownUnit": "seconds",
+  "sessionTimeout": 48,
+  "sessionTimeoutUnit": "hours",
+  "personalityDefaults": {},
+  "disabledCommands": [],
+  "rateLimitSettings": {
+    "enabled": true,
+    "maxRequests": 10,
+    "timeWindow": 60
+  },
+  "autoModeration": {
+    "enabled": false,
+    "deleteSpam": false,
+    "warnOnCaps": false
+  }
+}
+```
+
+### 3. **Command Structure**
+Create `/control` with these subcommands:
+
+#### **A. `/control toggle-bot`**
+- **Description:** Enable or disable the entire bot
+- **Options:**
+  - `state` (Boolean, required) - True = enable, False = disable
+- **Action:** Update `botConfig.botEnabled` and save to `config.json`
+
+#### **B. `/control set-ai-channel`**
+- **Description:** Change the AI auto-reply channel
+- **Options:**
+  - `channel` (Channel, required) - New AI channel
+- **Action:** Update `botConfig.aiChannelId` and save
+
+#### **C. `/control set-cooldown`**
+- **Description:** Set cooldown time for non-staff in AI channel
+- **Options:**
+  - `value` (Integer, required, min: 1, max: 60) - Cooldown value
+  - `unit` (String, required, choices: seconds/minutes) - Time unit
+- **Action:** Update `botConfig.cooldownTime` and `botConfig.cooldownUnit`, save, and **apply the change to the `COOLDOWN_TIME` constant**
+
+#### **D. `/control set-session-timeout`**
+- **Description:** Set how long AI sessions persist
+- **Options:**
+  - `value` (Integer, required, min: 1, max: 168) - Timeout value
+  - `unit` (String, required, choices: hours/days) - Time unit
+- **Action:** Update `botConfig.sessionTimeout` and `botConfig.sessionTimeoutUnit`, save, and **apply to `SESSION_TIMEOUT` constant**
+
+#### **E. `/control set-personality-default`**
+- **Description:** Set default personality for a channel
+- **Options:**
+  - `channel` (Channel, required) - Target channel
+  - `personality` (String, required, choices: default/eren/mikasa/levi/ymir/unhinged) - Personality name
+- **Action:** Update `botConfig.personalityDefaults[channelId]` and apply immediately
+
+#### **F. `/control disable-commands`**
+- **Description:** Hide specific command categories from Discord
+- **Options:**
+  - `category` (String, required, choices: game/fun/persona/all) - Category to disable
+  - `enable` (Boolean, required) - True = enable, False = disable
+- **Action:** Add/remove from `botConfig.disabledCommands[]` and **unregister commands from Discord** (use `guild.commands.set()` to update)
+
+#### **G. `/control rate-limit`**
+- **Description:** Configure rate limiting settings
+- **Options:**
+  - `enabled` (Boolean, required) - Enable/disable rate limiting
+  - `max_requests` (Integer, optional, min: 1, max: 100) - Max requests
+  - `time_window` (Integer, optional, min: 10, max: 300) - Time window in seconds
+- **Action:** Update `botConfig.rateLimitSettings` and save
+
+#### **H. `/control auto-mod`**
+- **Description:** Toggle basic auto-moderation features
+- **Options:**
+  - `feature` (String, required, choices: enabled/delete-spam/warn-on-caps) - Feature to toggle
+  - `state` (Boolean, required) - Enable/disable
+- **Action:** Update `botConfig.autoModeration[feature]` and save
+
+#### **I. `/control view-config`**
+- **Description:** View current bot configuration
+- **No options**
+- **Action:** Display a comprehensive embed showing all current settings (use ephemeral reply)
+
+#### **J. `/control clear-sessions`**
+- **Description:** Clear all active AI chat sessions
+- **No options**
+- **Action:** Clear the `chatSessions` Map and reply with count of cleared sessions
+
+#### **K. `/control add-status`**
+- **Description:** Add a new rotating status message
+- **Options:**
+  - `message` (String, required, max_length: 128) - Status text
+- **Action:** Push to `botConfig.statusMessages[]` and save
+
+#### **L. `/control remove-status`**
+- **Description:** Remove a status message by index
+- **Options:**
+  - `index` (Integer, required, min: 0) - Index to remove (shown in view-config)
+- **Action:** Remove from `botConfig.statusMessages[]` and save
+
+---
+
+## 🛠️ Implementation Instructions
+
+### Step 1: Add Command Definition
+Add this to the `slashCommands` array (after line 160, before the array closes):
+
+```javascript
+{
+  name: 'control',
+  description: 'Bot management & configuration (Staff only)',
+  options: [
+    {
+      name: 'toggle-bot',
+      description: 'Enable or disable the bot',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [{
+        name: 'state',
+        description: 'Bot state (true = enabled, false = disabled)',
+        type: ApplicationCommandOptionType.Boolean,
+        required: true
+      }]
+    },
+    {
+      name: 'set-ai-channel',
+      description: 'Change AI auto-reply channel',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [{
+        name: 'channel',
+        description: 'New AI channel',
+        type: ApplicationCommandOptionType.Channel,
+        required: true
+      }]
+    },
+    {
+      name: 'set-cooldown',
+      description: 'Set cooldown time for non-staff users',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'value',
+          description: 'Cooldown value',
+          type: ApplicationCommandOptionType.Integer,
+          required: true,
+          min_value: 1,
+          max_value: 60
+        },
+        {
+          name: 'unit',
+          description: 'Time unit',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          choices: [
+            { name: 'Seconds', value: 'seconds' },
+            { name: 'Minutes', value: 'minutes' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'set-session-timeout',
+      description: 'Set AI session timeout duration',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'value',
+          description: 'Timeout value',
+          type: ApplicationCommandOptionType.Integer,
+          required: true,
+          min_value: 1,
+          max_value: 168
+        },
+        {
+          name: 'unit',
+          description: 'Time unit',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          choices: [
+            { name: 'Hours', value: 'hours' },
+            { name: 'Days', value: 'days' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'set-personality-default',
+      description: 'Set default personality for a channel',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'channel',
+          description: 'Target channel',
+          type: ApplicationCommandOptionType.Channel,
+          required: true
+        },
+        {
+          name: 'personality',
+          description: 'Personality name',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          choices: [
+            { name: 'Default (The Founder)', value: 'default' },
+            { name: 'Eren Yeager', value: 'eren' },
+            { name: 'Mikasa Ackerman', value: 'mikasa' },
+            { name: 'Levi Ackerman', value: 'levi' },
+            { name: 'Ymir Fritz', value: 'ymir' },
+            { name: 'Unhinged', value: 'unhinged' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'disable-commands',
+      description: 'Hide command categories from Discord',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'category',
+          description: 'Command category',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          choices: [
+            { name: 'Game Commands', value: 'game' },
+            { name: 'Fun Commands', value: 'fun' },
+            { name: 'Persona System', value: 'persona' },
+            { name: 'All Categories', value: 'all' }
+          ]
+        },
+        {
+          name: 'enable',
+          description: 'True = enable category, False = disable category',
+          type: ApplicationCommandOptionType.Boolean,
+          required: true
+        }
+      ]
+    },
+    {
+      name: 'rate-limit',
+      description: 'Configure rate limiting',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'enabled',
+          description: 'Enable/disable rate limiting',
+          type: ApplicationCommandOptionType.Boolean,
+          required: true
+        },
+        {
+          name: 'max_requests',
+          description: 'Maximum requests allowed',
+          type: ApplicationCommandOptionType.Integer,
+          required: false,
+          min_value: 1,
+          max_value: 100
+        },
+        {
+          name: 'time_window',
+          description: 'Time window in seconds',
+          type: ApplicationCommandOptionType.Integer,
+          required: false,
+          min_value: 10,
+          max_value: 300
+        }
+      ]
+    },
+    {
+      name: 'auto-mod',
+      description: 'Toggle auto-moderation features',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        {
+          name: 'feature',
+          description: 'Feature to toggle',
+          type: ApplicationCommandOptionType.String,
+          required: true,
+          choices: [
+            { name: 'Auto-Moderation System', value: 'enabled' },
+            { name: 'Delete Spam', value: 'deleteSpam' },
+            { name: 'Warn on Caps', value: 'warnOnCaps' }
+          ]
+        },
+        {
+          name: 'state',
+          description: 'Enable/disable feature',
+          type: ApplicationCommandOptionType.Boolean,
+          required: true
+        }
+      ]
+    },
+    {
+      name: 'view-config',
+      description: 'View current bot configuration',
+      type: ApplicationCommandOptionType.Subcommand
+    },
+    {
+      name: 'clear-sessions',
+      description: 'Clear all AI chat sessions',
+      type: ApplicationCommandOptionType.Subcommand
+    },
+    {
+      name: 'add-status',
+      description: 'Add new rotating status message',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [{
+        name: 'message',
+        description: 'Status message text',
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        max_length: 128
+      }]
+    },
+    {
+      name: 'remove-status',
+      description: 'Remove status message by index',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [{
+        name: 'index',
+        description: 'Index to remove (see view-config)',
+        type: ApplicationCommandOptionType.Integer,
+        required: true,
+        min_value: 0
+      }]
+    }
+  ]
+}
+```
+
+### Step 2: Update config.json Default Structure
+Update the `loadConfig()` function to provide defaults if fields are missing:
+
+```javascript
+function loadConfig() {
+  try {
+    const data = fs.readFileSync('./config.json', 'utf8');
+    const config = JSON.parse(data);
+
+    // Ensure all required fields exist with defaults
+    return {
+      botEnabled: config.botEnabled ?? true,
+      aiChannelId: config.aiChannelId || process.env.AI_CHANNEL_ID,
+      statusMessages: config.statusMessages || [],
+      cooldownTime: config.cooldownTime ?? 3,
+      cooldownUnit: config.cooldownUnit || 'seconds',
+      sessionTimeout: config.sessionTimeout ?? 48,
+      sessionTimeoutUnit: config.sessionTimeoutUnit || 'hours',
+      personalityDefaults: config.personalityDefaults || {},
+      disabledCommands: config.disabledCommands || [],
+      rateLimitSettings: config.rateLimitSettings || {
+        enabled: true,
+        maxRequests: 10,
+        timeWindow: 60
+      },
+      autoModeration: config.autoModeration || {
+        enabled: false,
+        deleteSpam: false,
+        warnOnCaps: false
+      }
+    };
+  } catch (error) {
+    console.error('Error reading config:', error);
+    return null;
+  }
+}
+```
+
+### Step 3: Create Handler Function
+Add this function after the other slash command handlers (around line 850):
+
+```javascript
+async function handleSlashControl(interaction) {
+  const staffRoleId = process.env.STAFF_ROLE_ID;
+
+  // Staff permission check
+  if (!interaction.member.roles.cache.has(staffRoleId)) {
+    return interaction.reply({
+      content: '❌ **Access Denied:** This command requires Staff permissions.',
+      ephemeral: true
+    });
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+
+  try {
+    switch (subcommand) {
+      case 'toggle-bot': {
+        const state = interaction.options.getBoolean('state');
+        botConfig.botEnabled = state;
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Bot ${state ? '**enabled**' : '**disabled**'} successfully.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-ai-channel': {
+        const channel = interaction.options.getChannel('channel');
+        botConfig.aiChannelId = channel.id;
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ AI auto-reply channel set to ${channel}`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-cooldown': {
+        const value = interaction.options.getInteger('value');
+        const unit = interaction.options.getString('unit');
+
+        botConfig.cooldownTime = value;
+        botConfig.cooldownUnit = unit;
+        saveConfig(botConfig);
+
+        // Apply to global COOLDOWN_TIME constant
+        const multiplier = unit === 'minutes' ? 60000 : 1000;
+        global.COOLDOWN_TIME = value * multiplier;
+
+        await interaction.reply({
+          content: `✅ Cooldown set to **${value} ${unit}** (applies immediately)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-session-timeout': {
+        const value = interaction.options.getInteger('value');
+        const unit = interaction.options.getString('unit');
+
+        botConfig.sessionTimeout = value;
+        botConfig.sessionTimeoutUnit = unit;
+        saveConfig(botConfig);
+
+        // Apply to global SESSION_TIMEOUT constant
+        const multiplier = unit === 'days' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+        global.SESSION_TIMEOUT = value * multiplier;
+
+        await interaction.reply({
+          content: `✅ Session timeout set to **${value} ${unit}** (applies to new sessions)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'set-personality-default': {
+        const channel = interaction.options.getChannel('channel');
+        const personality = interaction.options.getString('personality');
+
+        botConfig.personalityDefaults[channel.id] = personality;
+        saveConfig(botConfig);
+
+        // Apply immediately
+        currentPersonalities.set(channel.id, personality);
+        clearChatSession(channel.id);
+
+        await interaction.reply({
+          content: `✅ Default personality for ${channel} set to **${personality}** (applied immediately)`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'disable-commands': {
+        const category = interaction.options.getString('category');
+        const enable = interaction.options.getBoolean('enable');
+
+        if (enable) {
+          // Remove from disabled list
+          botConfig.disabledCommands = botConfig.disabledCommands.filter(c => c !== category);
+        } else {
+          // Add to disabled list
+          if (!botConfig.disabledCommands.includes(category)) {
+            botConfig.disabledCommands.push(category);
+          }
+        }
+
+        saveConfig(botConfig);
+
+        // Filter commands based on disabled categories
+        const categoryMap = {
+          'game': ['survival', 'titan', 'stats'],
+          'fun': ['roast', 'roast-disable', 'roast-blacklist', 'mandela', 'fake-history', 'gaslight-reset'],
+          'persona': ['persona']
+        };
+
+        let commandsToRegister = [...slashCommands];
+
+        if (category === 'all') {
+          if (!enable) {
+            // Disable all non-essential commands
+            commandsToRegister = slashCommands.filter(cmd => 
+              ['purge', 'warn', 'announce', 'help', 'control'].includes(cmd.name)
+            );
+          }
+        } else {
+          // Filter by category
+          const disabledCmds = categoryMap[category] || [];
+          commandsToRegister = slashCommands.filter(cmd => 
+            !disabledCmds.includes(cmd.name)
+          );
+        }
+
+        const guild = interaction.guild;
+        await guild.commands.set(commandsToRegister);
+
+        await interaction.reply({
+          content: `✅ Command category **${category}** ${enable ? 'enabled' : 'disabled'}. Commands ${enable ? 'restored' : 'hidden'}.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'rate-limit': {
+        const enabled = interaction.options.getBoolean('enabled');
+        const maxRequests = interaction.options.getInteger('max_requests');
+        const timeWindow = interaction.options.getInteger('time_window');
+
+        botConfig.rateLimitSettings.enabled = enabled;
+        if (maxRequests !== null) botConfig.rateLimitSettings.maxRequests = maxRequests;
+        if (timeWindow !== null) botConfig.rateLimitSettings.timeWindow = timeWindow;
+
+        saveConfig(botConfig);
+
+        await interaction.reply({
+          content: `✅ Rate limiting ${enabled ? 'enabled' : 'disabled'}` +
+            (maxRequests ? `\n• Max requests: **${maxRequests}**` : '') +
+            (timeWindow ? `\n• Time window: **${timeWindow}s**` : ''),
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'auto-mod': {
+        const feature = interaction.options.getString('feature');
+        const state = interaction.options.getBoolean('state');
+
+        botConfig.autoModeration[feature] = state;
+        saveConfig(botConfig);
+
+        await interaction.reply({
+          content: `✅ Auto-moderation feature **${feature}** ${state ? 'enabled' : 'disabled'}`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'view-config': {
+        const cooldownMs = botConfig.cooldownTime * (botConfig.cooldownUnit === 'minutes' ? 60000 : 1000);
+        const sessionMs = botConfig.sessionTimeout * (botConfig.sessionTimeoutUnit === 'days' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000);
+
+        const embed = {
+          title: '⚙️ Bot Configuration Dashboard',
+          color: 0x00FF00,
+          fields: [
+            {
+              name: '🤖 Bot Status',
+              value: botConfig.botEnabled ? '✅ **Enabled**' : '❌ **Disabled**',
+              inline: true
+            },
+            {
+              name: '💬 AI Channel',
+              value: `<#${botConfig.aiChannelId}>`,
+              inline: true
+            },
+            {
+              name: '⏱️ Cooldown',
+              value: `${botConfig.cooldownTime} ${botConfig.cooldownUnit}`,
+              inline: true
+            },
+            {
+              name: '🕐 Session Timeout',
+              value: `${botConfig.sessionTimeout} ${botConfig.sessionTimeoutUnit}`,
+              inline: true
+            },
+            {
+              name: '📊 Active Sessions',
+              value: `${chatSessions.size} sessions`,
+              inline: true
+            },
+            {
+              name: '📺 Status Messages',
+              value: `${botConfig.statusMessages.length} loaded`,
+              inline: true
+            },
+            {
+              name: '🎭 Personality Defaults',
+              value: Object.keys(botConfig.personalityDefaults).length > 0 
+                ? Object.entries(botConfig.personalityDefaults)
+                    .map(([chId, pers]) => `<#${chId}>: ${pers}`)
+                    .join('\n')
+                : 'None set',
+              inline: false
+            },
+            {
+              name: '🚫 Disabled Commands',
+              value: botConfig.disabledCommands.length > 0 
+                ? botConfig.disabledCommands.join(', ')
+                : 'None',
+              inline: false
+            },
+            {
+              name: '⚡ Rate Limiting',
+              value: `${botConfig.rateLimitSettings.enabled ? '✅' : '❌'} Enabled` +
+                `\n• Max: ${botConfig.rateLimitSettings.maxRequests} requests` +
+                `\n• Window: ${botConfig.rateLimitSettings.timeWindow}s`,
+              inline: true
+            },
+            {
+              name: '🛡️ Auto-Moderation',
+              value: `${botConfig.autoModeration.enabled ? '✅' : '❌'} System` +
+                `\n${botConfig.autoModeration.deleteSpam ? '✅' : '❌'} Delete Spam` +
+                `\n${botConfig.autoModeration.warnOnCaps ? '✅' : '❌'} Warn on Caps`,
+              inline: true
+            }
+          ],
+          footer: { text: 'Use /control commands to modify these settings' },
+          timestamp: new Date()
+        };
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+
+      case 'clear-sessions': {
+        const count = chatSessions.size;
+        chatSessions.clear();
+        await interaction.reply({
+          content: `✅ Cleared **${count}** active AI chat sessions.`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'add-status': {
+        const message = interaction.options.getString('message');
+        botConfig.statusMessages.push(message);
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Added status message: "${message}"\nTotal: ${botConfig.statusMessages.length} messages`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      case 'remove-status': {
+        const index = interaction.options.getInteger('index');
+        if (index >= botConfig.statusMessages.length) {
+          return interaction.reply({
+            content: `❌ Invalid index. There are only ${botConfig.statusMessages.length} status messages.`,
+            ephemeral: true
+          });
+        }
+        const removed = botConfig.statusMessages.splice(index, 1);
+        saveConfig(botConfig);
+        await interaction.reply({
+          content: `✅ Removed status message: "${removed[0]}"\nRemaining: ${botConfig.statusMessages.length} messages`,
+          ephemeral: true
+        });
+        break;
+      }
+
+      default:
+        await interaction.reply({
+          content: '❌ Unknown subcommand.',
+          ephemeral: true
+        });
+    }
+
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in control command:`, error);
+    await interaction.reply({
+      content: '❌ An error occurred while processing your request.',
+      ephemeral: true
+    });
+  }
+}
+```
+
+### Step 4: Add to Interaction Handler
+In the `client.on('interactionCreate', ...)` handler (around line 1920), add this case to the switch statement:
+
+```javascript
+case 'control':
+  await handleSlashControl(interaction);
+  break;
+```
+
+### Step 5: Update Help Command
+Add a new function for the Bot Management help embed (around line 740, after `createFunEmbed()`):
+
+```javascript
+function createBotManagementEmbed() {
+  return {
+    title: '⚙️ Bot Management Commands',
+    description: 'Staff-only commands for bot configuration and control',
+    color: 0xFF0000,
+    fields: [
+      {
+        name: '/control toggle-bot',
+        value: 'Enable or disable the entire bot\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control set-ai-channel',
+        value: 'Change the AI auto-reply channel\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control set-cooldown',
+        value: 'Set cooldown time for non-staff users\n**Permission:** Staff only\n**Options:** Value (1-60) & Unit (seconds/minutes)',
+        inline: false
+      },
+      {
+        name: '/control set-session-timeout',
+        value: 'Set AI session timeout duration\n**Permission:** Staff only\n**Options:** Value (1-168) & Unit (hours/days)',
+        inline: false
+      },
+      {
+        name: '/control set-personality-default',
+        value: 'Set default personality for a channel\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control disable-commands',
+        value: 'Hide command categories from Discord\n**Permission:** Staff only\n**Categories:** game, fun, persona, all',
+        inline: false
+      },
+      {
+        name: '/control rate-limit',
+        value: 'Configure rate limiting settings\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control auto-mod',
+        value: 'Toggle auto-moderation features\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control view-config',
+        value: 'View current bot configuration\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control clear-sessions',
+        value: 'Clear all AI chat sessions\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control add-status',
+        value: 'Add new rotating status message\n**Permission:** Staff only',
+        inline: false
+      },
+      {
+        name: '/control remove-status',
+        value: 'Remove status message by index\n**Permission:** Staff only',
+        inline: false
+      }
+    ],
+    footer: { text: 'All settings saved to config.json and apply immediately' },
+    timestamp: new Date()
+  };
+}
+```
+
+### Step 6: Update Help Command Switch
+In the `handleSlashHelp()` function (around line 895), update the switch statement to include the new category:
+
+Add `'management'` case:
+```javascript
+case 'management':
+  embeds = [createBotManagementEmbed()];
+  break;
+```
+
+And update the `'all'` case to include it:
+```javascript
+case 'all':
+  embeds = [
+    createOverviewEmbed(),
+    createModerationEmbed(),
+    createPersonaEmbed(),
+    createAIEmbed(),
+    createGameEmbed(),
+    createFunEmbed(),
+    createBotManagementEmbed(),  // Add this line
+    createStatusEmbed()
+  ];
+  break;
+```
+
+### Step 7: Update Help Command Definition
+In the `slashCommands` array, find the `/help` command definition and add the new choice:
+
+```javascript
+{
+  name: 'help',
+  description: 'Show bot help menu',
+  options: [
+    {
+      name: 'category',
+      description: 'Help category to view',
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      choices: [
+        { name: 'Overview', value: 'overview' },
+        { name: 'Moderation', value: 'moderation' },
+        { name: 'Personality System', value: 'persona' },
+        { name: 'AI Features', value: 'ai' },
+        { name: 'Game Commands', value: 'game' },
+        { name: 'Fun Commands', value: 'fun' },
+        { name: 'Bot Management', value: 'management' },  // Add this line
+        { name: 'All Categories', value: 'all' }
+      ]
+    }
+  ]
+}
+```
+
+### Step 8: Update Overview Embed
+In the `createOverviewEmbed()` function (around line 665), add a new field for Bot Management:
+
+```javascript
+{
+  name: '⚙️ Bot Management',
+  value: 'Staff-only configuration controls\n\nType: `@The Founder help management`',
+  inline: false
+}
+```
+
+### Step 9: Initialize Constants at Startup
+At the top of `index.js` (around line 20), change these from `const` to globals that can be updated:
+
+Replace:
+```javascript
+const COOLDOWN_TIME = 3000; // 3 seconds
+```
+
+With:
+```javascript
+global.COOLDOWN_TIME = 3000; // Will be loaded from config
+```
+
+And in the bot ready event, load from config:
+```javascript
+client.once('ready', async () => {
+  console.log(`✅ Bot logged in as ${client.user.tag}`);
+
+  // Load dynamic config values
+  const cooldownMultiplier = botConfig.cooldownUnit === 'minutes' ? 60000 : 1000;
+  global.COOLDOWN_TIME = botConfig.cooldownTime * cooldownMultiplier;
+
+  const sessionMultiplier = botConfig.sessionTimeoutUnit === 'days' ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+  global.SESSION_TIMEOUT = botConfig.sessionTimeout * sessionMultiplier;
+
+  console.log(`✅ Cooldown: ${botConfig.cooldownTime} ${botConfig.cooldownUnit}`);
+  console.log(`✅ Session timeout: ${botConfig.sessionTimeout} ${botConfig.sessionTimeoutUnit}`);
+
+  // ... rest of ready event
+});
+```
+
+And update cooldown checks to use `global.COOLDOWN_TIME`:
+```javascript
+if (Date.now() < expirationTime) return;
+cooldowns.set(message.author.id, Date.now());
+setTimeout(() => cooldowns.delete(message.author.id), global.COOLDOWN_TIME);
+```
+
+---
+
+## ✅ Testing Checklist
+
+After implementation, test these scenarios:
+
+1. **Permission Check:** Non-staff users should get "Access Denied" message
+2. **Bot Toggle:** Verify bot stops responding when disabled
+3. **AI Channel:** Change channel and verify auto-replies work there
+4. **Cooldown:** Set to 10 seconds, verify non-staff users have cooldown
+5. **Session Timeout:** Set to 1 hour, verify old sessions expire
+6. **Personality Default:** Set for a channel, restart bot, verify it persists
+7. **Command Disable:** Disable "fun" category, verify commands disappear from Discord
+8. **View Config:** Check all settings display correctly
+9. **Help Integration:** Run `/help management` and `/help all`
+10. **Clear Sessions:** Verify session count resets to 0
+
+---
+
+## 🚨 Important Notes
+
+1. **Backup config.json** before first run with new structure
+2. All changes apply **immediately** (no restart needed except for disabled commands)
+3. **Staff logs** can be added for audit trail (log all `/control` usage to `STAFF_LOG_CHANNEL`)
+4. Use **ephemeral replies** for all control command responses
+5. The command will **auto-register** on next bot startup
+
+---
+
+## 📝 Summary
+
+This implementation adds:
+- ✅ 12 subcommands under `/control`
+- ✅ Real-time configuration without restarts
+- ✅ Staff-only permissions with checks
+- ✅ Full help integration with new "Bot Management" category
+- ✅ Config file hot-reload support
+- ✅ Dynamic command registration/unregistration
+- ✅ Comprehensive view-config dashboard
+
+All changes follow existing code patterns and will integrate seamlessly! 🎯

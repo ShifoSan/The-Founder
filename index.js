@@ -2,8 +2,12 @@
 require('dotenv').config();
 
 // 2. Import required modules
+const express = require('express');
+const { Client, GatewayIntentBits, ApplicationCommandOptionType } = require('discord.js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
+const aotrHandler = require('./aotr-handler.js');
 
 let currentStatusIndex = 0;
 
@@ -522,11 +526,6 @@ const slashCommands = [
     ]
   }
 ];
-
-const express = require('express');
-const { Client, GatewayIntentBits, ApplicationCommandOptionType } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const aotrHandler = require('./aotr-handler.js');
 
 // --- Environment Variable Validation ---
 const requiredEnv = ['DISCORD_TOKEN', 'GEMINI_API_KEY', 'AI_CHANNEL_ID', 'STAFF_ROLE_ID', 'STAFF_LOG_CHANNEL'];

@@ -917,26 +917,26 @@ async function handleHelpCommand(message, content) {
     const args = content.split(/\s+/).filter(arg => arg.length > 0);
     const subcommand = args[1]?.toLowerCase() || 'overview';
 
-    let embeds = [];
+    let embedsList = [];
 
     switch (subcommand) {
       case 'moderation':
-        embeds = [embeds.createModerationEmbed()];
+        embedsList = [embeds.createModerationEmbed()];
         break;
       case 'persona':
-        embeds = [embeds.createPersonaEmbed()];
+        embedsList = [embeds.createPersonaEmbed()];
         break;
       case 'ai':
-        embeds = [embeds.createAIEmbed(botConfig)];
+        embedsList = [embeds.createAIEmbed(botConfig)];
         break;
       case 'game':
-        embeds = [embeds.createGameEmbed()];
+        embedsList = [embeds.createGameEmbed()];
         break;
       case 'fun':
-        embeds = [embeds.createFunEmbed()];
+        embedsList = [embeds.createFunEmbed()];
         break;
       case 'all':
-        embeds = [
+        embedsList = [
           embeds.createOverviewEmbed(client),
           embeds.createModerationEmbed(),
           embeds.createPersonaEmbed(),
@@ -948,12 +948,12 @@ async function handleHelpCommand(message, content) {
         break;
       case 'overview':
       default:
-        embeds = [embeds.createOverviewEmbed(client)];
+        embedsList = [embeds.createOverviewEmbed(client)];
         break;
     }
 
     // Send embeds
-    await message.reply({ embeds: embeds });
+    await message.reply({ embeds: embedsList });
 
     console.log(`[${new Date().toISOString()}] Help command used: ${subcommand}`);
 
@@ -1224,26 +1224,26 @@ async function handleSlashPersona(interaction) {
 async function handleSlashHelp(interaction) {
   const category = interaction.options.getString('category') || 'overview';
 
-  let embeds = [];
+  let embedsList = [];
 
   switch (category) {
     case 'moderation':
-      embeds = [embeds.createModerationEmbed()];
+      embedsList = [embeds.createModerationEmbed()];
       break;
     case 'persona':
-      embeds = [embeds.createPersonaEmbed()];
+      embedsList = [embeds.createPersonaEmbed()];
       break;
     case 'ai':
-      embeds = [embeds.createAIEmbed(botConfig)];
+      embedsList = [embeds.createAIEmbed(botConfig)];
       break;
     case 'game':
-      embeds = [embeds.createGameEmbed()];
+      embedsList = [embeds.createGameEmbed()];
       break;
     case 'management':
-      embeds = [embeds.createBotManagementEmbed()];
+      embedsList = [embeds.createBotManagementEmbed()];
       break;
     case 'all':
-      embeds = [
+      embedsList = [
         embeds.createOverviewEmbed(client),
         embeds.createModerationEmbed(),
         embeds.createPersonaEmbed(),
@@ -1256,11 +1256,11 @@ async function handleSlashHelp(interaction) {
       break;
     case 'overview':
     default:
-      embeds = [embeds.createOverviewEmbed(client)];
+      embedsList = [embeds.createOverviewEmbed(client)];
       break;
   }
 
-  await interaction.reply({ embeds: embeds });
+  await interaction.reply({ embeds: embedsList });
 }
 
 async function handleSlashSurvival(interaction) {
